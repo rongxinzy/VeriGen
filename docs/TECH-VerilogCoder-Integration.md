@@ -376,6 +376,18 @@ Graphify（`safishamsi/graphify`，PyPI 包名 `graphifyy`，CLI 命令 `graphif
 | S2 接入 | TS VerilogAnalysis 客户端拉起常驻 worker；`traceSimulationFailure` 作为编排器 sim-fail 确定性调用入口；Context Router 裁剪后注入 Debugger | `packages/verigen` + 集成测试已完成 |
 | S3 TS 迁移 | KG（Graphology）、RAG（Vectra）、prompt/ICL/Playbook 资产落 TS 与 `.pi`；默认接入 Graphify Repo/Docs Context Graph，暴露模型自主查询工具；运行时无 autogen 依赖 | `packages/verigen` S3 模块 + `.pi/prompts` + `.pi/skills` 已完成 |
 | S4 npm 打包 | npm 一键安装；Python worker 与 `vendor/pyverilog` 随 npm 分发；第三方 Python 依赖与 Graphify 从 PyPI 自举；无 Docker | 已完成：`@earendil-works/pi-verigen` 可 pack/install，CLI、doctor、本地 worker bootstrap、`parse_ast` smoke 均通过 |
+| S5 VeriGen Mode + TUI Trace MVP | 把底层能力接入产品入口；展示流水线状态、仿真失败、trace report；引入 Codegen Quality Probe 小题集 | 固定失败 RTL + VCD 能在 TUI 展示 trace report；L0/L1 小题能生成 RTL 供人工评审 |
+| S6 EDA ToolRunner 标准化 | 统一 iverilog/vvp、Verilator、Yosys、Himasim profile 和错误 schema | `lint -> sim -> trace` 可结构化返回给 Debugger；Quality Probe 可跑 compile/sim |
+| S7 四 Agent 闭环 | Planner/Coder/Verifier/Debugger 串联，最多 3 轮 fix loop | counter、edge detector、简单 FSM 能自然语言到仿真通过；Quality Probe 记录修复轮次 |
+| S8 Context Router 强化 | Graphify、KG、Playbook、trace 统一裁剪和注入 | 模型能自动取相关规则/文件/图节点，不全仓盲搜 |
+| S9 Board Profile 抽象 + Mock Bring-up | board schema、constraints schema、programmer interface、mock board backend | 固定 `blink_led` 在 mock backend 中完成 synth/bitstream/program/report dry-run |
+| S10 Dry-run Hardware Flow | 受控模板任务接入 sim/synth/dry-run program/smoke report | 简单模块由 VeriGen 生成，完成 sim/synth/dry-run hardware report |
+| S11 发布工程化 | npm 发布、release smoke、示例工程、CI pack/install smoke | 新机器按 quickstart 可安装并跑通 smoke |
+| S12 评测与数据闭环 | Codegen Quality Probe 正式化；VerilogEval/自建用例、失败样本库、指标统计 | 可量化生成质量、收敛率、修复轮次、错误分类分布 |
+| S13 产品级 TUI 信息架构 | 项目仪表盘、pipeline navigator、inspector tabs、run history | 用户能在 TUI 完成一次完整 RTL debug 工作流 |
+| S14 TUI 可视化 polish | 波形窗口、信号依赖图、RTL diff、键盘操作、状态体系 | TUI 达到可演示、可重复使用、信息密度合理 |
+| S15 产品化交付闭环 | onboarding、doctor 修复建议、模板、profile 管理、报告导出、session replay | 可用于正式演示、内部试用和后续商业化包装 |
+| S16 Real FPGA Validation | 接真实板卡 backend、真实 programmer、真实观测 smoke | 固定 demo 和一个 VeriGen 生成模块在真实 FPGA 上 smoke 通过 |
 
 ---
 

@@ -8,7 +8,7 @@
 
 - **做什么**：把 VerilogCoder（Python/AutoGen）的核心能力——尤其是 **AST 波形追踪调试**——融入 VeriGen（基于 **pi** 的 TypeScript agent harness），做成一个 Verilog RTL「设计-验证-修复流水线 Agent」。参赛创客中国华大九天赛题。
 - **现状**：S0 可行性验证、**S1 Python Worker**、**S2 TS 接入层**、**S3 TS 主体迁移** 与 **S4 npm 打包** 已完成。`packages/verigen` 现在包含 worker client、Spec KG、Playbook RAG、Graphify 默认上下文工具层、npm CLI、Python worker bootstrap 与 doctor。
-- **下一步**：进入 S5 产品接入与发布准备：把 `verigen` CLI/TUI 接入正式 pi 分发入口、补生产级用户文档、确认 npm 发布权限与 tag 策略。
+- **下一步**：进入 S5 产品接入：实现 VeriGen Mode + TUI Trace MVP，并按 `docs/ROADMAP-VeriGen.md` 推进到 S15 产品化交付；没有真实 FPGA 设备时不阻塞产品化，S9/S10 走 mock/dry-run，真实设备验证放到 S16。
 - **四条已锁定的硬决策**（不要推翻，除非有充分新证据）：
   1. **混合架构**：TS 主体 + 受管 Python Worker。
   2. **Worker 随 npm vendor + uv 受管环境**，唯一无 TS 平替的硬依赖是 **pyverilog**。
@@ -24,13 +24,14 @@
 | VeriGen 主仓库（pi fork，TS monorepo） | `~/workspace/VeriGen`（当前工作目录，git 仓库，分支 `main`） |
 | VerilogCoder 源码（待吸收，**只读参考，不要改它**） | `~/workspace/VerilogCoder` |
 | 产品设计文档（PDD） | `docs/PDD-VeriGen.md` |
+| 产品化路线图（S5-S16） | `docs/ROADMAP-VeriGen.md` |
 | 技术改造文档（依赖分析 + 架构 + npm-vendored Python worker + worker 协议） | `docs/TECH-VerilogCoder-Integration.md` |
 | 本交接文档 | `docs/HANDOFF.md` |
 | VeriGen TS 垂直层 | `packages/verigen`（`VerilogAnalysis`、Spec KG、Playbook RAG、Graphify Context、Context Router） |
 | Prompt / Playbook 资产 | `.pi/prompts/verigen-*.md`、`.pi/skills/verigen-playbook.md` |
 | 跨会话项目记忆 | `~/.claude/projects/-Users-krli-workspace-VeriGen/memory/verigen-architecture.md` |
 
-**必读顺序**：本文件 → `TECH-VerilogCoder-Integration.md`（工程细节最关键）→ `PDD-VeriGen.md`（产品全貌）。
+**必读顺序**：本文件 → `ROADMAP-VeriGen.md`（S5-S16 路线图）→ `TECH-VerilogCoder-Integration.md`（工程细节最关键）→ `PDD-VeriGen.md`（产品全貌）。
 
 ---
 
@@ -166,6 +167,27 @@ VERIGEN_CACHE_DIR=/tmp/verigen-s4-cache-final /tmp/verigen-s4-install-final/bin/
 结果：build、pack、临时安装、CLI 启动、worker bootstrap、`parse_ast` smoke、doctor 均通过；tarball 包含 `dist/python/verilog-analysis` 与 `vendor/pyverilog`，不包含 `.venv`、wheelhouse、`__pycache__` 或 pyc/pyo 缓存。Graphify 默认启用；缺失索引时 `graphify-status/query/path` 返回 `stale_or_missing_index`，ready fixture 下 `graphify-query` 和 `graphify-path` 能返回节点与路径。
 
 验收冒烟标准见 TECH 文档 §11。
+
+### S5-S16 — 产品化路线图
+
+S5 之后不再只是“底层能力可用”，而是把 VeriGen 做成可演示、可试用、可发布的 Verilog 工程 agent 产品。没有真实 FPGA 设备时，S9/S10 先稳定 board/profile/report 抽象和 mock/dry-run backend，真实设备到位后再做 S16。另从 S5 开始引入 **Codegen Quality Probe**，中途持续观察 Verilog 生成质量，S12 再升级为正式评测体系。完整路线图见 `docs/ROADMAP-VeriGen.md`，阶段摘要如下：
+
+| 阶段 | 目标 |
+|---|---|
+| S5 | VeriGen Mode + TUI Trace MVP + Codegen Quality Probe 小题集 |
+| S6 | EDA ToolRunner 标准化，Quality Probe 可跑 compile/sim |
+| S7 | Planner/Coder/Verifier/Debugger 四 Agent 闭环，Quality Probe 记录修复轮次 |
+| S8 | Graphify、KG、Playbook、trace 的 Context Router 强化 |
+| S9 | Board Profile 抽象 + Mock Bring-up |
+| S10 | Dry-run Hardware Flow |
+| S11 | npm 发布、示例工程、CI smoke、quickstart |
+| S12 | Codegen Quality Probe 正式化、评测与 RTL failure dataset 数据闭环 |
+| S13 | 产品级 TUI 信息架构 |
+| S14 | TUI 可视化 polish |
+| S15 | onboarding、profile 管理、报告导出、session replay 等产品化交付 |
+| S16 | Real FPGA Validation：真实板卡、真实 programmer、真实 smoke |
+
+Codegen Quality Probe 的测试 LLM 端点按 Anthropic-compatible 格式接入：`http://172.18.5.179:3000`（兼容实现可能要求 `/v1`）。默认测试模型固定为 `kimi-for-coding`。API key 不写入仓库；运行时通过 `VERIGEN_TEST_LLM_API_KEY` 注入，base URL 通过 `VERIGEN_TEST_LLM_BASE_URL` 注入，模型名通过 `VERIGEN_TEST_LLM_MODEL` 注入。
 
 ---
 
