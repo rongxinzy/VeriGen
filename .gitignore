@@ -1,7 +1,11 @@
 node_modules/
 dist/
+.venv/
 *.log
 .DS_Store
+__pycache__/
+*.py[cod]
+*.egg-info/
 *.tsbuildinfo
 # packages/*/node_modules/
 packages/*/dist/
@@ -34,6 +38,8 @@ out.jsonl
 pi-*.html
 out.html
 packages/coding-agent/binaries/
+packages/verilog-analysis/requirements.lock.txt
+packages/verilog-analysis/wheelhouse/
 todo.md
 plans/
 .pi/hf-sessions/
