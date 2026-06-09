@@ -108,8 +108,10 @@ describe("VerilogAnalysis", () => {
 	test("keeps a worker alive, pairs JSONL responses by id, and formats sim-fail trace context", async () => {
 		const fixture = createSimulationFixture();
 		tempDirs.push(fixture.tempDir);
+		const cacheRoot = mkdtempSync(join(tmpdir(), "verigen-worker-cache-"));
+		tempDirs.push(cacheRoot);
 
-		const worker = new VerilogAnalysis({ workerCwd, requestTimeoutMs: 60_000 });
+		const worker = new VerilogAnalysis({ workerRoot: workerCwd, cacheRoot, requestTimeoutMs: 60_000 });
 		try {
 			const [parseResult, seqResult] = await Promise.all([
 				worker.parseAst({ rtl: buggyRtl, top: "TopModule" }),

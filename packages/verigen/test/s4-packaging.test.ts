@@ -77,14 +77,18 @@ describe("S4 npm packaging surface", () => {
 		assert.ok(parsed.files.includes("CHANGELOG.md"));
 		assert.ok(isRecord(parsed.scripts));
 		const buildScript = parsed.scripts.build;
+		const version = parsed.version;
 		if (typeof buildScript !== "string") {
 			throw new Error("expected package build script to be a string");
+		}
+		if (typeof version !== "string") {
+			throw new Error("expected package version to be a string");
 		}
 		assert.match(buildScript, /copy-python-worker/);
 		assert.equal(parsed.scripts.prepack, "npm run build");
 		assert.ok(isRecord(parsed.dependencies));
-		assert.equal(parsed.dependencies["@earendil-works/pi-coding-agent"], "^0.78.1");
-		assert.equal(parsed.dependencies["@earendil-works/pi-tui"], "^0.78.1");
+		assert.equal(parsed.dependencies["@earendil-works/pi-coding-agent"], `^${version}`);
+		assert.equal(parsed.dependencies["@earendil-works/pi-tui"], `^${version}`);
 
 		const copyScript = readFileSync(join(packageRoot, "scripts", "copy-python-worker.mjs"), "utf8");
 		assert.match(copyScript, /dist\/pi-assets/);
