@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### New Features
+
+- **Project trust controls** - Project-local settings, resources, instructions, and packages are gated behind explicit trust decisions.
+- **Extension and package APIs** - RPC extension UI request/response types and package asset path helpers are exported for extension authors.
+
 ### Added
 
 - Added project trust gating for project-local settings, resources, instructions, and packages ([#5332](https://github.com/earendil-works/pi/pull/5332)).
