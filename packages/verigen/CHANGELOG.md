@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed release smoke verification on tag checkouts that do not yet contain the next-cycle changelog section.
+
 ## [0.79.1] - 2026-06-09
 
 ### Fixed

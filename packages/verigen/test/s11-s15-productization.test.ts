@@ -119,6 +119,49 @@ describe("S11-S15 productization layer", () => {
 		assert.match(renderReleaseSmokeVerificationReport(report), /local release smoke verification/);
 	});
 
+	test("accepts a release tag changelog without the next Unreleased section", () => {
+		const repoRoot = mkdtempSync(join(tmpdir(), "verigen-tag-smoke-"));
+		tempDirs.push(repoRoot);
+		const packageRoot = join(repoRoot, "packages", "verigen");
+		writeText(
+			join(packageRoot, "package.json"),
+			JSON.stringify({
+				name: "@earendil-works/pi-verigen",
+				version: "1.2.3",
+				bin: { verigen: "./dist/cli.js" },
+				files: ["dist", "README.md", "CHANGELOG.md"],
+				scripts: { prepack: "npm run build" },
+				dependencies: {
+					"@earendil-works/pi-coding-agent": "^1.2.3",
+					"@earendil-works/pi-tui": "^1.2.3",
+				},
+				exports: {
+					"./coding-agent-extension": {
+						import: "./dist/verigen-coding-agent-extension.js",
+						types: "./dist/verigen-coding-agent-extension.d.ts",
+					},
+				},
+			}),
+		);
+		writeText(join(packageRoot, "src", "verigen-coding-agent-extension.ts"), "export {};\n");
+		writeText(
+			join(packageRoot, "src", "verigen-agent-launcher.ts"),
+			"const extension = 'verigen-coding-agent-extension'; const flag = '--extension';\n",
+		);
+		writeText(join(packageRoot, "CHANGELOG.md"), "# Changelog\n\n## [1.2.3] - 2026-06-09\n");
+		writeText(join(repoRoot, "packages", "verilog-analysis", "pyproject.toml"), "[project]\n");
+		writeText(join(repoRoot, "packages", "verilog-analysis", "src", "verilog_analysis", "__init__.py"), "\n");
+		writeText(
+			join(repoRoot, "packages", "verilog-analysis", "vendor", "pyverilog", "setup.py"),
+			"from setuptools import setup\n",
+		);
+
+		const report = verifyLocalReleaseSmoke({ repoRoot });
+
+		assert.equal(report.status, "pass");
+		assert.ok(report.checks.some((check) => check.id === "changelog" && check.status === "pass"));
+	});
+
 	test("verifies built dist release surface without running npm pack", () => {
 		const repoRoot = mkdtempSync(join(tmpdir(), "verigen-dist-smoke-"));
 		tempDirs.push(repoRoot);

@@ -224,6 +224,11 @@ export function verifyLocalReleaseSmoke(options: VerifyLocalReleaseSmokeOptions 
 	const extensionDist = join(workspace.packageRoot, "dist", "verigen-coding-agent-extension.js");
 	const agentLauncherSource = join(workspace.packageRoot, "src", "verigen-agent-launcher.ts");
 	const agentLauncherDist = join(workspace.packageRoot, "dist", "verigen-agent-launcher.js");
+	const changelogPath = join(workspace.packageRoot, "CHANGELOG.md");
+	const packageVersion = typeof packageJson?.version === "string" ? packageJson.version : undefined;
+	const changelogHasCurrentRelease =
+		fileContains(changelogPath, "## [Unreleased]") ||
+		(packageVersion !== undefined && fileContains(changelogPath, `## [${packageVersion}]`));
 	const checks: ReleaseSmokeVerificationCheck[] = [];
 
 	checks.push(
@@ -345,9 +350,9 @@ export function verifyLocalReleaseSmoke(options: VerifyLocalReleaseSmokeOptions 
 		check(
 			"changelog",
 			"package changelog exists",
-			checkStatus(fileContains(join(workspace.packageRoot, "CHANGELOG.md"), "## [Unreleased]")),
-			join(workspace.packageRoot, "CHANGELOG.md"),
-			"Keep a package changelog with an [Unreleased] section so the release script can publish release notes.",
+			checkStatus(changelogHasCurrentRelease),
+			changelogPath,
+			"Keep a package changelog with an [Unreleased] section or the current release section.",
 		),
 	);
 
