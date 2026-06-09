@@ -253,7 +253,7 @@ function repairCommandForCheck(check: VerigenDoctorResult["checks"][number]): st
 	if (check.name === "iverilog" || check.name === "vvp")
 		return "Install Icarus Verilog and make iverilog/vvp available on PATH.";
 	if (check.name === "python-worker")
-		return "Reinstall @earendil-works/pi-verigen or run from a package that includes dist/python/verilog-analysis.";
+		return "Reinstall verigen or run from a package that includes dist/python/verilog-analysis.";
 	if (check.name === "worker-venv") return "Run verigen doctor to recreate the managed Python worker venv.";
 	if (check.name === "graphify-index") return "Run verigen graphify-update from the repository root.";
 	if (check.name === "node") return "Use Node >=22.19.0.";

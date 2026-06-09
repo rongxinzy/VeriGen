@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Release script for pi-mono
+ * Release script for VeriGen
  *
  * Usage:
  *   node scripts/release.mjs <major|minor|patch>
@@ -8,9 +8,9 @@
  *
  * Steps:
  * 1. Check for uncommitted changes
- * 2. Bump version via npm run version:xxx or set an explicit version
- * 3. Update CHANGELOG.md files: [Unreleased] -> [version] - date
- * 4. Regenerate release artifacts
+ * 2. Bump packages/verigen version via npm or set an explicit version
+ * 3. Update packages/verigen/CHANGELOG.md: [Unreleased] -> [version] - date
+ * 4. Build VeriGen release artifacts
  * 5. Run checks
  * 6. Commit and tag the release
  * 7. Add new [Unreleased] section to changelogs
@@ -19,8 +19,7 @@
  */
 
 import { execSync } from "child_process";
-import { readFileSync, writeFileSync, readdirSync, existsSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 
 const RELEASE_TARGET = process.argv[2];
 const BUMP_TYPES = new Set(["major", "minor", "patch"]);
@@ -45,7 +44,7 @@ function run(cmd, options = {}) {
 }
 
 function getVersion() {
-	const pkg = JSON.parse(readFileSync("packages/ai/package.json", "utf-8"));
+	const pkg = JSON.parse(readFileSync("packages/verigen/package.json", "utf-8"));
 	return pkg.version;
 }
 
@@ -82,7 +81,7 @@ function bumpOrSetVersion(target) {
 
 	if (BUMP_TYPES.has(target)) {
 		console.log(`Bumping version (${target})...`);
-		run(`npm run version:${target}`);
+		run(`npm --prefix packages/verigen version ${target} --no-git-tag-version && npm install --package-lock-only --ignore-scripts`);
 		return getVersion();
 	}
 
@@ -92,16 +91,13 @@ function bumpOrSetVersion(target) {
 	}
 
 	console.log(`Setting explicit version (${target})...`);
-	run(`npm version ${target} -ws --no-git-tag-version && node scripts/sync-versions.js && npm install --package-lock-only --ignore-scripts`);
+	run(`npm --prefix packages/verigen version ${target} --no-git-tag-version && npm install --package-lock-only --ignore-scripts`);
 	return getVersion();
 }
 
 function getChangelogs() {
-	const packagesDir = "packages";
-	const packages = readdirSync(packagesDir);
-	return packages
-		.map((pkg) => join(packagesDir, pkg, "CHANGELOG.md"))
-		.filter((path) => existsSync(path));
+	const changelog = "packages/verigen/CHANGELOG.md";
+	return existsSync(changelog) ? [changelog] : [];
 }
 
 function updateChangelogsForRelease(version) {
@@ -166,9 +162,8 @@ console.log();
 
 // 4. Regenerate release artifacts
 console.log("Regenerating release artifacts...");
-run("npm --prefix packages/ai run generate-models");
-run("npm --prefix packages/ai run generate-image-models");
-run("npm run shrinkwrap:coding-agent");
+run("npm --prefix packages/verigen run clean");
+run("npm --prefix packages/verigen run build");
 console.log();
 
 // 5. Run checks

@@ -4,13 +4,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const packages = [
-	{ directory: "packages/ai", name: "@earendil-works/pi-ai" },
-	{ directory: "packages/agent", name: "@earendil-works/pi-agent-core" },
-	{ directory: "packages/tui", name: "@earendil-works/pi-tui" },
-	{ directory: "packages/coding-agent", name: "@earendil-works/pi-coding-agent" },
-	{ directory: "packages/verigen", name: "@earendil-works/pi-verigen" },
-];
+const packageToPublish = { directory: "packages/verigen", name: "verigen" };
+const registry = "https://registry.npmjs.org/";
 
 const dryRun = process.argv.includes("--dry-run");
 const unknownArgs = process.argv.slice(2).filter((arg) => arg !== "--dry-run");
@@ -57,7 +52,7 @@ function validatePack(directory) {
 }
 
 function isPublished(name, version) {
-	const result = spawnSync(commandForPlatform("npm"), ["view", `${name}@${version}`, "version", "--json"], {
+	const result = spawnSync(commandForPlatform("npm"), ["view", `${name}@${version}`, "version", "--json", "--registry", registry], {
 		encoding: "utf8",
 		stdio: ["inherit", "pipe", "pipe"],
 	});
@@ -74,43 +69,38 @@ function isPublished(name, version) {
 	throw new Error(output ? `Failed to query ${name}@${version}\n${output}` : `Failed to query ${name}@${version}`);
 }
 
-const packageVersions = new Map();
-for (const pkg of packages) {
-	const packageJson = readPackageJson(pkg.directory);
-	if (packageJson.name !== pkg.name) {
-		throw new Error(`${pkg.directory}/package.json has name ${packageJson.name}, expected ${pkg.name}`);
-	}
-	packageVersions.set(pkg.name, packageJson.version);
+const packageJson = readPackageJson(packageToPublish.directory);
+if (packageJson.name !== packageToPublish.name) {
+	throw new Error(`${packageToPublish.directory}/package.json has name ${packageJson.name}, expected ${packageToPublish.name}`);
 }
 
-const versions = [...new Set(packageVersions.values())];
-if (versions.length !== 1) {
-	throw new Error(`Publish packages are not lockstep versioned: ${versions.join(", ")}`);
+const version = packageJson.version;
+if (typeof version !== "string" || version.length === 0) {
+	throw new Error(`${packageToPublish.directory}/package.json must declare a version`);
 }
 
-console.log(`Publishing pi packages at ${versions[0]}${dryRun ? " (dry run)" : ""}\n`);
+console.log(`Publishing VeriGen package ${packageToPublish.name}@${version}${dryRun ? " (dry run)" : ""}\n`);
 
-for (const pkg of packages) {
-	const version = packageVersions.get(pkg.name);
-	assertBuildOutputExists(pkg.directory);
-	const published = isPublished(pkg.name, version);
+assertBuildOutputExists(packageToPublish.directory);
+const published = isPublished(packageToPublish.name, version);
 
-	if (dryRun) {
-		if (published) {
-			console.log(`${pkg.name}@${version} is already published; validating package contents only.`);
-		} else {
-			console.log(`${pkg.name}@${version} is not published; validating package contents before publish.`);
-		}
-		validatePack(pkg.directory);
-		console.log();
-		continue;
-	}
-
+if (dryRun) {
 	if (published) {
-		console.log(`Skipping ${pkg.name}@${version}: already published\n`);
-		continue;
+		console.log(`${packageToPublish.name}@${version} is already published; validating package contents only.`);
+	} else {
+		console.log(`${packageToPublish.name}@${version} is not published; validating package contents before publish.`);
 	}
-
-	run("npm", ["publish", "--access", "public", "--provenance", "--ignore-scripts"], { cwd: pkg.directory });
+	validatePack(packageToPublish.directory);
 	console.log();
+	process.exit(0);
 }
+
+if (published) {
+	console.log(`Skipping ${packageToPublish.name}@${version}: already published\n`);
+	process.exit(0);
+}
+
+run("npm", ["publish", "--access", "public", "--provenance", "--ignore-scripts", "--registry", registry], {
+	cwd: packageToPublish.directory,
+});
+console.log();

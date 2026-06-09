@@ -153,7 +153,7 @@ npm pack --pack-destination /tmp/verigen-pack
 
 ```bash
 rm -rf /tmp/verigen-preview /tmp/verigen-preview-cache
-npm install -g --prefix /tmp/verigen-preview /tmp/verigen-pack/earendil-works-pi-verigen-0.78.1.tgz --ignore-scripts
+npm install -g --prefix /tmp/verigen-preview /tmp/verigen-pack/verigen-0.79.2.tgz --ignore-scripts
 ```
 
 运行：
@@ -256,7 +256,7 @@ verigen agent --dry-run
 
 ## npm 分发策略
 
-`@earendil-works/pi-verigen` 发布时包含：
+`verigen` 发布时包含：
 
 - TypeScript 编译产物
 - `verigen` CLI
@@ -285,7 +285,7 @@ verigen agent --dry-run
 - S9 已证明固定 `blink_led` 和 `uart_loopback` 能在 mock backend 中完成 validate、synth、bitstream、program、observe dry-run，并输出结构化 report。
 - S10 已证明受控模板能先真实仿真通过，再进入 mock board dry-run hardware report。
 - S11-S15 已证明 release checklist、本地 release smoke verifier、built dist 包面预检、pack/install smoke plan、评测指标、产品 workbench TUI preview、onboarding、provider config page、doctor repair suggestions、project template scaffold、profile management、轻量交互 TUI、pi-tui Component 适配契约、coding-agent extension 挂载入口、TUI action replay、响应式布局、layout persistence、Markdown report artifact、报告导出和 session replay 均可结构化输出。
-- 当前产品 TUI 是响应式终端 workbench 状态模型：宽屏三栏、中等宽度双栏、窄终端堆叠，已支持 `product-workbench` 交互入口、焦点、inspector 切换和 density toggle。`verigen agent` 默认把内置 workbench extension 传给 pi；外部也可通过 `@earendil-works/pi-verigen/coding-agent-extension` 或 `installVerigenCodingAgentExtension()` 挂入 coding-agent widget/custom message renderer。离线 TUI dogfood 已验证首屏能加载 extension 并渲染 workbench；后续继续视觉 polish。
+- 当前产品 TUI 是响应式终端 workbench 状态模型：宽屏三栏、中等宽度双栏、窄终端堆叠，已支持 `product-workbench` 交互入口、焦点、inspector 切换和 density toggle。`verigen agent` 默认把内置 workbench extension 传给 pi；外部也可通过 `verigen/coding-agent-extension` 或 `installVerigenCodingAgentExtension()` 挂入 coding-agent widget/custom message renderer。离线 TUI dogfood 已验证首屏能加载 extension 并渲染 workbench；后续继续视觉 polish。
 - 真实 FPGA 测试放到 S16，应从固定 `blink_led` bring-up 开始，再接 VeriGen 生成 RTL。
 
 ## 文档

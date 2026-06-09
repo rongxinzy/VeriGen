@@ -106,6 +106,8 @@ interface PackageJsonShape {
 	dependencies?: unknown;
 }
 
+const VERIGEN_PACKAGE_NAME = "verigen";
+
 function readPackageJson(path: string): PackageJsonShape | undefined {
 	try {
 		return JSON.parse(readFileSync(path, "utf8")) as PackageJsonShape;
@@ -117,15 +119,15 @@ function readPackageJson(path: string): PackageJsonShape | undefined {
 function resolveReleaseWorkspace(inputRoot: string | undefined): ReleaseWorkspace {
 	const root = inputRoot ? resolve(inputRoot) : currentReleasePackageRoot();
 	const rootPackage = readPackageJson(join(root, "package.json"));
-	if (rootPackage?.name === "@earendil-works/pi-verigen") {
+	if (rootPackage?.name === VERIGEN_PACKAGE_NAME) {
 		return { packageRoot: root, repoRoot: resolve(root, "../..") };
 	}
 	const nestedPackageRoot = join(root, "packages", "verigen");
-	if (readPackageJson(join(nestedPackageRoot, "package.json"))?.name === "@earendil-works/pi-verigen") {
+	if (readPackageJson(join(nestedPackageRoot, "package.json"))?.name === VERIGEN_PACKAGE_NAME) {
 		return { repoRoot: root, packageRoot: nestedPackageRoot };
 	}
 	const parentPackageRoot = resolve(root, "packages", "verigen");
-	if (readPackageJson(join(parentPackageRoot, "package.json"))?.name === "@earendil-works/pi-verigen") {
+	if (readPackageJson(join(parentPackageRoot, "package.json"))?.name === VERIGEN_PACKAGE_NAME) {
 		return { repoRoot: root, packageRoot: parentPackageRoot };
 	}
 	return { repoRoot: root, packageRoot: root };
@@ -246,9 +248,9 @@ export function verifyLocalReleaseSmoke(options: VerifyLocalReleaseSmokeOptions 
 			check(
 				"package-name",
 				"npm package name",
-				checkStatus(packageJson.name === "@earendil-works/pi-verigen"),
+				checkStatus(packageJson.name === VERIGEN_PACKAGE_NAME),
 				String(packageJson.name ?? ""),
-				"Keep the VeriGen package name stable before npm publish.",
+				"Keep the VeriGen package name as the standalone npm package before publish.",
 			),
 			check(
 				"bin-entry",
@@ -476,7 +478,7 @@ export function createReleasePackInstallSmokePlan(
 ): ReleasePackInstallSmokePlan {
 	const workspace = resolveReleaseWorkspace(options.repoRoot);
 	const packageJson = readPackageJson(join(workspace.packageRoot, "package.json"));
-	const packageName = stringField(packageJson?.name, "@earendil-works/pi-verigen");
+	const packageName = stringField(packageJson?.name, VERIGEN_PACKAGE_NAME);
 	const version = stringField(packageJson?.version, "0.0.0");
 	const packDestination = resolve(options.packDestination ?? "/tmp/verigen-pack-smoke");
 	const installPrefix = resolve(options.installPrefix ?? "/tmp/verigen-install-smoke");
@@ -663,11 +665,11 @@ export function createReleaseEngineeringReport(): ReleaseEngineeringReport {
 		},
 	];
 	return {
-		packageName: "@earendil-works/pi-verigen",
-		versionStrategy: "lockstep with pi monorepo packages",
+		packageName: VERIGEN_PACKAGE_NAME,
+		versionStrategy: "standalone VeriGen package version",
 		publishTarget: "npm package with vendored Python worker source and pyverilog fork",
 		quickstart: [
-			"npm install -g @earendil-works/pi-verigen",
+			"npm install -g verigen",
 			"verigen doctor",
 			"verigen worker-smoke --json",
 			"verigen quality-probe fix-loop --case l0-mux2",

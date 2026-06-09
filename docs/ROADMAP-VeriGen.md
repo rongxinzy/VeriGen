@@ -326,7 +326,7 @@ S11-S15 当前实现：新增 `release-smoke`、`eval-suite`、`product-preview`
 - `verigen release-smoke --verify-local` 可检查 package manifest、bin、files whitelist、prepack hook、pi coding-agent/pi-tui 依赖、`./coding-agent-extension` 子路径导出、S15 workbench extension 入口、`verigen agent` 默认 extension 加载、Python worker 源码、vendored pyverilog fork 和 no-Docker 安装边界。
 - `verigen release-smoke --verify-dist` 可在 build/prepack 之后检查 built `dist` 包面，覆盖 CLI/API 入口、coding-agent extension、agent extension wiring、Python worker、vendored pyverilog、VeriGen prompt assets 和 skill assets，不触发 `npm pack` 或 build。
 - `verigen release-smoke --pack-install-plan` 可输出真实 pack/install smoke 的命令清单，覆盖 source precheck、`npm pack`、临时 prefix install、installed CLI、installed `--verify-dist`、agent extension、product TUI、Quality Probe、hardware flow、doctor 和 worker smoke；它只输出计划，不执行命令、不处理 npm 认证。
-- `@earendil-works/pi-verigen` 已纳入 root build、local release 和 publish 脚本，并新增 `packages/verigen/CHANGELOG.md`；正式 release/tag 后 CI publish job 才会覆盖 VeriGen npm 包。
+- 独立 npm 包 `verigen` 已纳入 root build、local release 和 publish 脚本，并新增 `packages/verigen/CHANGELOG.md`；正式 release/tag 后 CI publish job 只发布 VeriGen npm 包，不发布 pi runtime 包。
 - npm publish 权限、dist-tag 和真实 release command 仍需发布前确认。
 - 真实 `npm pack` / 临时 prefix install smoke 仍需发布前显式运行。
 
@@ -456,7 +456,7 @@ S11-S15 当前实现：新增 `release-smoke`、`eval-suite`、`product-preview`
 - doctor repair suggestions 会把 doctor warn/error 转换为 required/optional 修复动作。
 - project templates 覆盖 counter、FSM、UART loopback、I2C skeleton；`product-template --id ... --output ...` 可生成 README、RTL、testbench 和 `verigen.json`。
 - board profile management 以 mock profile list、programmer、clock/reset 和 smoke actions 进入 workbench model；`product-preview --profiles` 可单独查看。
-- `verigen agent` 默认通过 `--extension` 加载内置 workbench extension；`createProductWorkbenchPiTuiMount()` 暴露 `@earendil-works/pi-tui` Component 适配契约；`@earendil-works/pi-verigen/coding-agent-extension` 和 `installVerigenCodingAgentExtension()` 可在 coding-agent `session_start`/`turn_end` 时挂入 below-editor widget，并注册 `/verigen-workbench show|hide|toggle|snapshot`。
+- `verigen agent` 默认通过 `--extension` 加载内置 workbench extension；`createProductWorkbenchPiTuiMount()` 暴露 `@earendil-works/pi-tui` Component 适配契约；`verigen/coding-agent-extension` 和 `installVerigenCodingAgentExtension()` 可在 coding-agent `session_start`/`turn_end` 时挂入 below-editor widget，并注册 `/verigen-workbench show|hide|toggle|snapshot`。
 - `exportProductReportMarkdown()` 输出可分享报告；`createProductReportArtifact()` 和 `product-preview --report --output <path>` 可生成落盘 Markdown artifact。
 - report artifact 包含 onboarding、provider、layout、inspector snapshot、keybindings、release smoke 和 session replay。
 - session replay 记录 onboarding、template、sim、board、report 和 TUI action 事件。

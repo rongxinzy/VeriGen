@@ -375,7 +375,7 @@ Graphify（`safishamsi/graphify`，PyPI 包名 `graphifyy`，CLI 命令 `graphif
 | S1 Worker | 封装 4 个无状态 RPC（私有 JSON-stdio），uv 项目 + uv.lock + 离线安装脚本 | `packages/verilog-analysis` 可独立启动 |
 | S2 接入 | TS VerilogAnalysis 客户端拉起常驻 worker；`traceSimulationFailure` 作为编排器 sim-fail 确定性调用入口；Context Router 裁剪后注入 Debugger | `packages/verigen` + 集成测试已完成 |
 | S3 TS 迁移 | KG（Graphology）、RAG（Vectra）、prompt/ICL/Playbook 资产落 TS 与 `.pi`；默认接入 Graphify Repo/Docs Context Graph，暴露模型自主查询工具；运行时无 autogen 依赖 | `packages/verigen` S3 模块 + `.pi/prompts` + `.pi/skills` 已完成 |
-| S4 npm 打包 | npm 一键安装；Python worker 与 `vendor/pyverilog` 随 npm 分发；第三方 Python 依赖与 Graphify 从 PyPI 自举；无 Docker | 已完成：`@earendil-works/pi-verigen` 可 pack/install，CLI、doctor、本地 worker bootstrap、`parse_ast` smoke 均通过 |
+| S4 npm 打包 | npm 一键安装；Python worker 与 `vendor/pyverilog` 随 npm 分发；第三方 Python 依赖与 Graphify 从 PyPI 自举；无 Docker | 已完成：独立包 `verigen` 可 pack/install，CLI、doctor、本地 worker bootstrap、`parse_ast` smoke 均通过 |
 | S5 VeriGen Mode + TUI Trace MVP | 把底层能力接入产品入口；展示流水线状态、仿真失败、trace report；引入 Codegen Quality Probe 小题集 | 固定失败 RTL + VCD 能在 TUI 展示 trace report；L0/L1 小题能生成 RTL 供人工评审 |
 | S6 EDA ToolRunner 标准化 | 统一 iverilog/vvp、Verilator、Yosys、Himasim profile 和错误 schema | `lint -> sim -> trace` 可结构化返回给 Debugger；Quality Probe 可跑 compile/sim |
 | S7 四 Agent 闭环 | Planner/Coder/Verifier/Debugger 串联，最多 3 轮 fix loop | counter、edge detector、简单 FSM 能自然语言到仿真通过；Quality Probe 记录修复轮次 |
@@ -404,7 +404,7 @@ S4 已完成的 npm 安装验收（2026-06-08）：
 ```bash
 npm --prefix packages/verigen run build
 cd packages/verigen && npm pack --pack-destination /tmp/verigen-s4-pack
-npm install --global --prefix /tmp/verigen-s4-install-final /tmp/verigen-s4-pack/earendil-works-pi-verigen-0.78.1.tgz --ignore-scripts
+npm install --global --prefix /tmp/verigen-s4-install-final /tmp/verigen-s4-pack/verigen-0.79.2.tgz --ignore-scripts
 /tmp/verigen-s4-install-final/bin/verigen --help
 VERIGEN_CACHE_DIR=/tmp/verigen-s4-cache-final /tmp/verigen-s4-install-final/bin/verigen worker-smoke --json
 VERIGEN_CACHE_DIR=/tmp/verigen-s4-cache-final /tmp/verigen-s4-install-final/bin/verigen doctor --json

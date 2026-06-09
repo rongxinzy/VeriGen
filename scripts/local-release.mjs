@@ -1,22 +1,18 @@
 #!/usr/bin/env node
 
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const packages = [
-	{ directory: "packages/ai", name: "@earendil-works/pi-ai" },
-	{ directory: "packages/tui", name: "@earendil-works/pi-tui" },
-	{ directory: "packages/agent", name: "@earendil-works/pi-agent-core" },
-	{ directory: "packages/coding-agent", name: "@earendil-works/pi-coding-agent" },
-	{ directory: "packages/verigen", name: "@earendil-works/pi-verigen" },
+	{ directory: "packages/verigen", name: "verigen" },
 ];
 
 function printUsage() {
 	console.log(`Usage: node scripts/local-release.mjs [options]
 
-Builds and packs the publishable packages, then installs the tarballs into an
+Builds and packs the VeriGen npm package, then installs the tarball into an
 isolated directory outside the repository for local release testing.
 
 Options:
@@ -24,7 +20,7 @@ Options:
   --force              Remove --out first if it already exists
   --skip-check         Do not run npm run check before building
   --skip-install       Only create tarballs; do not create isolated installs
-  --skip-bun-install   Do not create the isolated Bun install
+  --skip-bun-install   Do not create the isolated Bun package install
   --help               Show this help
 `);
 }
@@ -125,48 +121,19 @@ function fileSpecifier(fromDirectory, file) {
 	return `file:${relativePath.startsWith(".") ? relativePath : `./${relativePath}`}`;
 }
 
-function currentBinaryPlatform() {
-	if (process.platform === "win32") return process.arch === "arm64" ? "windows-arm64" : "windows-x64";
-	if (process.platform === "darwin") return process.arch === "arm64" ? "darwin-arm64" : "darwin-x64";
-	if (process.platform === "linux") return process.arch === "arm64" ? "linux-arm64" : "linux-x64";
-	throw new Error(`Unsupported binary platform: ${process.platform} ${process.arch}`);
-}
-
-function buildBunBinaryRelease(targetDirectory, archiveDirectory) {
-	if (!commandExists("bun")) {
-		throw new Error("Bun is required for the local binary release build.");
-	}
-	const platform = currentBinaryPlatform();
-	const binaryBuildDirectory = join(archiveDirectory, "binary-build");
-	run("./scripts/build-binaries.sh", [
-		"--skip-install",
-		"--skip-deps",
-		"--skip-build",
-		"--platform",
-		platform,
-		"--out",
-		binaryBuildDirectory,
-	]);
-	rmSync(targetDirectory, { force: true, recursive: true });
-	cpSync(join(binaryBuildDirectory, platform), targetDirectory, { recursive: true });
-	const archiveName = platform.startsWith("windows-") ? `pi-${platform}.zip` : `pi-${platform}.tar.gz`;
-	cpSync(join(binaryBuildDirectory, archiveName), join(archiveDirectory, archiveName));
-	return platform;
-}
-
-function createPiShim(installDirectory) {
+function createVerigenShim(installDirectory) {
 	const binDirectory = join(installDirectory, "node_modules", ".bin");
 	if (process.platform === "win32") {
-		if (existsSync(join(binDirectory, "pi.cmd"))) {
-			writeFileSync(join(installDirectory, "pi.cmd"), '@ECHO off\r\n"%~dp0node_modules\\.bin\\pi.cmd" %*\r\n');
-			writeFileSync(join(installDirectory, "pi.ps1"), '& "$PSScriptRoot/node_modules/.bin/pi.ps1" @args\n');
+		if (existsSync(join(binDirectory, "verigen.cmd"))) {
+			writeFileSync(join(installDirectory, "verigen.cmd"), '@ECHO off\r\n"%~dp0node_modules\\.bin\\verigen.cmd" %*\r\n');
+			writeFileSync(join(installDirectory, "verigen.ps1"), '& "$PSScriptRoot/node_modules/.bin/verigen.ps1" @args\n');
 			return;
 		}
-		writeFileSync(join(installDirectory, "pi.cmd"), '@ECHO off\r\n"%~dp0node_modules\\.bin\\pi.exe" %*\r\n');
-		writeFileSync(join(installDirectory, "pi.ps1"), '& "$PSScriptRoot/node_modules/.bin/pi.exe" @args\n');
+		writeFileSync(join(installDirectory, "verigen.cmd"), '@ECHO off\r\n"%~dp0node_modules\\.bin\\verigen.exe" %*\r\n');
+		writeFileSync(join(installDirectory, "verigen.ps1"), '& "$PSScriptRoot/node_modules/.bin/verigen.exe" @args\n');
 		return;
 	}
-	symlinkSync(join("node_modules", ".bin", "pi"), join(installDirectory, "pi"));
+	symlinkSync(join("node_modules", ".bin", "verigen"), join(installDirectory, "verigen"));
 }
 
 function packPackage(pkg, tarballDirectory) {
@@ -195,7 +162,6 @@ const outDir = prepareOutputDirectory(options, repoRoot);
 const tarballDirectory = join(outDir, "tarballs");
 const nodeInstallDirectory = join(outDir, "node");
 const bunInstallDirectory = join(outDir, "bun-install");
-const binaryDirectory = join(outDir, "bun");
 mkdirSync(tarballDirectory, { recursive: true });
 
 if (!options.skipCheck) {
@@ -213,10 +179,7 @@ for (const pkg of packages) {
 	tarballs.set(pkg.name, tarball);
 }
 
-let binaryPlatform;
 if (!options.skipInstall) {
-	binaryPlatform = buildBunBinaryRelease(binaryDirectory, outDir);
-
 	mkdirSync(nodeInstallDirectory, { recursive: true });
 	const dependencies = Object.fromEntries(
 		packages.map((pkg) => [pkg.name, fileSpecifier(nodeInstallDirectory, tarballs.get(pkg.name))]),
@@ -225,7 +188,7 @@ if (!options.skipInstall) {
 	writeFileSync(join(nodeInstallDirectory, "package.json"), installPackageJson);
 
 	run("npm", ["install", "--omit=dev", "--ignore-scripts"], { cwd: nodeInstallDirectory });
-	createPiShim(nodeInstallDirectory);
+	createVerigenShim(nodeInstallDirectory);
 
 	if (!options.skipBunInstall) {
 		if (!commandExists("bun")) {
@@ -237,7 +200,7 @@ if (!options.skipInstall) {
 		);
 		writeFileSync(join(bunInstallDirectory, "package.json"), `${JSON.stringify({ private: true, dependencies: bunDependencies, overrides: bunDependencies }, undefined, "\t")}\n`);
 		run("bun", ["install", "--production", "--ignore-scripts"], { cwd: bunInstallDirectory });
-		createPiShim(bunInstallDirectory);
+		createVerigenShim(bunInstallDirectory);
 	}
 }
 
@@ -249,21 +212,15 @@ for (const tarball of tarballs.values()) {
 }
 
 if (!options.skipInstall) {
-	console.log("\nLocal Bun binary release:");
-	console.log(`  ${binaryDirectory}`);
-	console.log(`  ${join(outDir, `pi-${binaryPlatform}.${String(binaryPlatform).startsWith("windows-") ? "zip" : "tar.gz"}`)}`);
-	console.log("\nRun the local Bun binary release from outside the repository:");
-	console.log(`  ${join(binaryDirectory, String(binaryPlatform).startsWith("windows-") ? "pi.exe" : "pi")} --help`);
-
 	console.log("\nIsolated npm install:");
 	console.log(`  ${nodeInstallDirectory}`);
 	console.log("\nRun the locally packed npm CLI from outside the repository:");
-	console.log(`  ${join(nodeInstallDirectory, process.platform === "win32" ? "pi.cmd" : "pi")} --help`);
+	console.log(`  ${join(nodeInstallDirectory, process.platform === "win32" ? "verigen.cmd" : "verigen")} --help`);
 
 	if (!options.skipBunInstall) {
 		console.log("\nIsolated Bun package install:");
 		console.log(`  ${bunInstallDirectory}`);
 		console.log("\nRun the locally packed Bun package CLI from outside the repository:");
-		console.log(`  ${join(bunInstallDirectory, process.platform === "win32" ? "pi.cmd" : "pi")} --help`);
+		console.log(`  ${join(bunInstallDirectory, process.platform === "win32" ? "verigen.cmd" : "verigen")} --help`);
 	}
 }

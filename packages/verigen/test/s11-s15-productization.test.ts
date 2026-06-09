@@ -64,7 +64,7 @@ describe("S11-S15 productization layer", () => {
 	test("builds a release smoke checklist with quickstart and examples", () => {
 		const report = createReleaseEngineeringReport();
 
-		assert.equal(report.packageName, "@earendil-works/pi-verigen");
+		assert.equal(report.packageName, "verigen");
 		assert.ok(report.quickstart.some((command) => command.includes("verigen doctor")));
 		assert.ok(report.quickstart.some((command) => command.includes("verigen agent --dry-run --json")));
 		assert.ok(report.smokeSteps.some((step) => step.id === "hardware-flow" && step.required));
@@ -83,7 +83,7 @@ describe("S11-S15 productization layer", () => {
 		writeText(
 			join(packageRoot, "package.json"),
 			JSON.stringify({
-				name: "@earendil-works/pi-verigen",
+				name: "verigen",
 				version: "1.2.3",
 			}),
 		);
@@ -96,9 +96,9 @@ describe("S11-S15 productization layer", () => {
 		});
 		const rendered = renderReleasePackInstallSmokePlan(plan);
 
-		assert.equal(plan.packageName, "@earendil-works/pi-verigen");
+		assert.equal(plan.packageName, "verigen");
 		assert.equal(plan.version, "1.2.3");
-		assert.ok(plan.tarballPath.endsWith("earendil-works-pi-verigen-1.2.3.tgz"));
+		assert.ok(plan.tarballPath.endsWith("verigen-1.2.3.tgz"));
 		assert.ok(plan.steps.some((step) => step.id === "pack" && step.command.includes("npm --prefix")));
 		assert.ok(plan.steps.some((step) => step.id === "installed-worker-smoke"));
 		assert.ok(plan.steps.some((step) => step.id === "installed-dist-surface"));
@@ -126,14 +126,14 @@ describe("S11-S15 productization layer", () => {
 		writeText(
 			join(packageRoot, "package.json"),
 			JSON.stringify({
-				name: "@earendil-works/pi-verigen",
+				name: "verigen",
 				version: "1.2.3",
 				bin: { verigen: "./dist/cli.js" },
 				files: ["dist", "README.md", "CHANGELOG.md"],
 				scripts: { prepack: "npm run build" },
 				dependencies: {
-					"@earendil-works/pi-coding-agent": "^1.2.3",
-					"@earendil-works/pi-tui": "^1.2.3",
+					"@earendil-works/pi-coding-agent": "0.79.0",
+					"@earendil-works/pi-tui": "0.79.0",
 				},
 				exports: {
 					"./coding-agent-extension": {
@@ -169,7 +169,7 @@ describe("S11-S15 productization layer", () => {
 		writeText(
 			join(packageRoot, "package.json"),
 			JSON.stringify({
-				name: "@earendil-works/pi-verigen",
+				name: "verigen",
 				version: "0.0.0-test",
 			}),
 		);
