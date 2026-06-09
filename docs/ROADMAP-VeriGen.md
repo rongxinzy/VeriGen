@@ -10,7 +10,21 @@
 - **真实 FPGA 验证**：不阻塞 S5-S15；没有设备时先做 mock/dry-run，设备到位后进入 **S16**。
 - **生成质量探针**：从 S5 开始常驻执行 Codegen Quality Probe，先人工评审，S12 升级为正式评测体系。
 
-当前状态：S0-S4 已完成。下一步从 S5 开始。
+当前状态：S0-S15 MVP 已完成。下一步继续增强交互式产品 TUI polish，并在真实 FPGA 设备到位后进入 S16。
+
+S5 当前实现：`packages/verigen` 已新增 VeriGen mode/profile、文本 trace panel、固定失败 `trace-demo`、用户文件 `trace-panel`、`tui-preview`、`verigen agent`、Codegen Quality Probe L0/L1 小题和可选 Anthropic-compatible 生成调用。后续 S13/S14 会在此基础上继续产品级 TUI 信息架构和可视化 polish。
+
+S6 当前实现：新增统一 EDA ToolRunner schema，已接入 `iverilog/vvp` compile/sim、Verilator lint profile、Yosys synth profile、Himasim placeholder/profile，并让 Codegen Quality Probe 支持 `--run-tools` 进入 compile/sim。本机 Verilator/Yosys/Himasim 未安装时会按统一 schema 返回 `missing_tool`，`doctor` 给出修复建议。
+
+S7 当前实现进展：新增 `runCodegenQualityProbeFixLoop` 和 `verigen quality-probe fix-loop`，将 Quality Probe case 编排为 Planner/Coder/Verifier/Debugger 四阶段闭环。默认 dry-run 会先制造一次仿真失败再修复通过；`--live` 会把每轮 Coder prompt 发给配置的 Anthropic-compatible endpoint。report 已记录最多 3 轮、失败类型、修复轮次、Verifier 结果和最终 RTL。
+
+S8 当前实现进展：新增 `buildVerigenRoutedContext`，统一裁剪 Spec KG、Playbook、Graphify query result、trace context 和 ToolRunner issues，输出可注入 Coder/Debugger 的 section list、rendered context、预算和 omission 统计。当前先落 API 和测试，agent runtime tool mapping、S7 report 注入和 TUI inspector 接入仍待推进。
+
+S9 当前实现：新增 board profile/schema、mock programmer backend、固定 `blink_led` 和 `uart_loopback` 设计，以及 `verigen board-smoke --smoke ...`。mock backend 已能输出 validate、synth、bitstream、program、observe 的结构化 dry-run report；真实设备仍放到 S16。
+
+S10 当前实现：新增 `runDryRunHardwareFlow` 和 `verigen hardware-flow --template ...`，受控模板会先跑真实 `iverilog/vvp` 仿真，再进入 S9 mock board validate/synth/bitstream/program/observe，输出 `simResult`、`boardReport` 和 `issues`。
+
+S11-S15 当前实现：新增 `release-smoke`、`eval-suite`、`product-preview`、`product-workbench` 和 `product-template`。当前已能输出 release smoke checklist、本地 release smoke verifier、built dist 包面预检、pack/install smoke plan、quickstart、CI checklist、example projects、evaluation metrics、failure samples、product workbench model、响应式 TUI preview、轻量交互 TUI、pi-tui Component 适配契约、`verigen agent` 默认 extension 加载、coding-agent extension 挂载入口、onboarding、provider config page、doctor repair suggestions、project template scaffold、board profile management、inspector tabs、keybindings、可回放 TUI action、layout persistence、session replay 和可落盘 markdown report artifact。离线 TUI dogfood 已验证首屏能加载 extension 并渲染 workbench；真实 npm pack/install smoke 和视觉 polish 仍可继续增强。
 
 ## 总览
 
@@ -105,6 +119,17 @@
 - Debugger 能看到裁剪后的 trace context。
 - L0/L1 小题能生成 RTL 供人工评审。
 
+当前落地：
+
+- `verigen agent` 加载 VeriGen prompts/skill 后委托给原 pi coding-agent，保留 pi 对话流、工具调用、会话和 TUI 基础能力。
+- `verigen mode` 输出 S5 VeriGen profile 和任务阶段。
+- `verigen trace-demo` 用固定失败 RTL/VCD 自动生成 trace panel。
+- `verigen trace-panel --rtl ... --vcd ... --mismatch ...` 对用户文件生成 trace panel。
+- `verigen tui-preview trace-demo` 把固定失败 trace report 渲染成 S5 TUI 预览快照。
+- `verigen tui-preview quality-probe --case l0-mux2 --live` 把生成 RTL 和人工评审清单渲染成 S5 TUI 预览快照。
+- `verigen quality-probe list` 展示 L0/L1 小题集。
+- `verigen quality-probe run --case l0-mux2 --live` 用 `VERIGEN_TEST_LLM_MODEL=kimi-for-coding` 调内网 Anthropic-compatible endpoint，输出生成 RTL、工具结果占位和人工评审清单。
+
 ## S6：EDA ToolRunner 标准化
 
 目标：把 lint、sim、synth 从临时命令变成稳定工具层。
@@ -130,6 +155,15 @@
 - 工具错误能结构化返回给 Verifier/Debugger。
 - Codegen Quality Probe 生成的 RTL 能进入 compile/sim 检查。
 
+当前落地：
+
+- `verigen tool-runner sim --rtl ... --tb ... --top ... --json` 运行 `iverilog/vvp`。
+- `verigen tool-runner lint --rtl ... --top ... --json` 运行 Verilator lint，缺失时返回 `missing_tool`。
+- `verigen tool-runner synth --rtl ... --top ... --json` 运行 Yosys synth/check，缺失时返回 `missing_tool`。
+- `verigen tool-runner himasim --json` 提供 Himasim profile/placeholder。
+- `verigen quality-probe run --case l0-mux2 --live --run-tools` 对生成 RTL 运行 compile/sim。
+- `verigen doctor` 检查 Verilator、Yosys、Himasim 并给修复建议。
+
 ## S7：四 Agent 闭环
 
 目标：让 Planner/Coder/Verifier/Debugger 真正协作。
@@ -149,6 +183,19 @@
 - 失败时进入 Debugger，不是盲目重写全部 RTL。
 - Quality Probe 每题记录修复轮次和失败类型。
 
+当前落地：
+
+- `runCodegenQualityProbeFixLoop(caseId)` 生成 module contract / KG seed，并运行最多 3 轮 fix loop。
+- `verigen quality-probe fix-loop --case l0-mux2` 提供无 LLM 的 deterministic smoke：第一轮仿真失败，Debugger 生成 repair prompt，第二轮通过。
+- `verigen quality-probe fix-loop --case l0-mux2 --live` 使用配置的 Anthropic-compatible endpoint 生成每轮 RTL。
+- 结构化 report 包含 `repairRounds`、每轮 `failureType`、Verifier `edaResults`、Debugger repair prompt 和最终 RTL。
+
+仍需补齐：
+
+- 扩展 edge detector、FSM 等 S7 验收任务。
+- 将 Debugger 的 sim-fail 分支接入更通用的 trace report，而不是只消费 ToolRunner failure summary。
+- 将 S7 report 接入后续 TUI inspector。
+
 ## S8：Context Router 强化
 
 目标：让 Graphify、KG、Playbook、trace 进入统一上下文路由。
@@ -165,6 +212,19 @@
 
 - 同一任务下，模型能自动取到相关 prompt、Playbook 规则、设计文档和实现文件。
 - 上下文不会全仓展开。
+
+当前落地：
+
+- `buildVerigenRoutedContext` 可合并 KG、Playbook、Graphify、trace 和 tool results。
+- 每个来源都有独立数量限制；整体有 `maxTotalChars` 和 `maxSectionChars`。
+- Graphify 只注入 query 命中的节点 path/summary，不注入 raw graph。
+- trace 只消费 S2/S5 已裁剪的 `DebuggerTraceContext`，不注入 raw VCD。
+
+仍需补齐：
+
+- 将 router 映射到 agent runtime 的真实 tool/context 注入点。
+- 把 S7 fix-loop report 注入 Coder/Debugger。
+- 把 routed sections 接到后续 TUI inspector。
 
 ## S9：Board Profile 抽象 + Mock Bring-up
 
@@ -201,6 +261,13 @@
 - 非 AI 生成的固定 demo 能在 mock backend 中完成 synth、bitstream、program、observe 的 dry-run。
 - 输出 report schema 与未来真实 FPGA backend 保持一致。
 
+当前落地：
+
+- `createDefaultMockBoardProfile()` 定义 mock FPGA part、clock/reset、pin constraints 和 mock programmer。
+- `createBlinkLedDesign()` 与 `createUartLoopbackDesign()` 提供固定 smoke RTL。
+- `runMockBoardBringup()` 输出 validate、synth、bitstream、program、observe steps、artifacts、observations 和 issues。
+- `verigen board-smoke --smoke blink_led` 和 `--smoke uart_loopback` 可从 CLI 预览 dry-run report。
+
 ## S10：Dry-run Hardware Flow
 
 目标：把 Agent 生成代码接入硬件流程抽象，但不要求真实设备。先证明 sim/synth/dry-run program/report 的产品链路完整。
@@ -217,6 +284,18 @@
 
 - VeriGen 生成一个简单模块。
 - 仿真通过、综合通过、dry-run hardware smoke report 通过。
+
+当前落地：
+
+- `runDryRunHardwareFlow({ template: "blink_led" })` 和 `uart_loopback` 已跑通。
+- 受控模板先进入 S6 `iverilog/vvp` 仿真。
+- 仿真通过后进入 S9 mock board dry-run report。
+- 自定义未审核 design 会被拒绝，避免未知 IO 和未约束硬件流进入后端。
+
+仍需补齐：
+
+- 把 S7/S8 Agent 生成 RTL 接入受控 hardware templates。
+- 引入 mock synth 之外的可选 Yosys profile，通过缺工具时继续保留 dry-run 路径。
 
 ## S11：发布工程化
 
@@ -239,6 +318,17 @@
 
 - 新机器按 README 能安装并跑通 CLI/worker/doctor smoke。
 - 发布流程可重复。
+
+当前落地：
+
+- `createReleaseEngineeringReport()` 输出 package name、version strategy、publish target、quickstart、smoke steps、examples、CI checklist 和 release blockers。
+- `verigen release-smoke` 可预览 S11 checklist。
+- `verigen release-smoke --verify-local` 可检查 package manifest、bin、files whitelist、prepack hook、pi coding-agent/pi-tui 依赖、`./coding-agent-extension` 子路径导出、S15 workbench extension 入口、`verigen agent` 默认 extension 加载、Python worker 源码、vendored pyverilog fork 和 no-Docker 安装边界。
+- `verigen release-smoke --verify-dist` 可在 build/prepack 之后检查 built `dist` 包面，覆盖 CLI/API 入口、coding-agent extension、agent extension wiring、Python worker、vendored pyverilog、VeriGen prompt assets 和 skill assets，不触发 `npm pack` 或 build。
+- `verigen release-smoke --pack-install-plan` 可输出真实 pack/install smoke 的命令清单，覆盖 source precheck、`npm pack`、临时 prefix install、installed CLI、installed `--verify-dist`、agent extension、product TUI、Quality Probe、hardware flow、doctor 和 worker smoke；它只输出计划，不执行命令、不处理 npm 认证。
+- `@earendil-works/pi-verigen` 已纳入 root build、local release 和 publish 脚本，并新增 `packages/verigen/CHANGELOG.md`；正式 release/tag 后 CI publish job 才会覆盖 VeriGen npm 包。
+- npm publish 权限、dist-tag 和真实 release command 仍需发布前确认。
+- 真实 `npm pack` / 临时 prefix install smoke 仍需发布前显式运行。
 
 ## S12：评测与数据闭环
 
@@ -273,6 +363,12 @@
 - 每次评测有可比较指标。
 - 失败样本可回灌 Playbook。
 
+当前落地：
+
+- `runEvaluationSuite("smoke" | "roadmap")` 运行固定 Quality Probe case。
+- 指标包含 `passAt1Rate`、`convergenceRate`、`averageRepairRounds` 和 `failureTypeDistribution`。
+- `verigen eval-suite --suite smoke` 可输出可比较 report 和 replay hint。
+
 ## S13：产品级 TUI 信息架构
 
 目标：把 TUI 从“通用聊天界面”升级为“Verilog 工程工作台”。
@@ -296,6 +392,13 @@
 
 - 用户不看终端原始日志，也能理解当前任务阶段、失败原因、修复依据和下一步。
 
+当前落地：
+
+- `createProductWorkbenchModel()` 定义项目仪表盘、pipeline navigator、task log、inspector tabs 和 run history/session replay。
+- inspector tabs 覆盖 RTL diff、sim log、trace report、waveform、KG、Graphify、tool log 和 board report。
+- `verigen product-preview --tui` 可渲染响应式 workbench TUI preview，宽屏三栏、中等宽度双栏、窄终端堆叠，并支持通过 `--inspector` 指定 inspector。
+- `verigen product-workbench` 可进入轻量交互终端 TUI，支持 keybindings 驱动状态切换。
+
 ## S14：TUI 可视化 polish
 
 目标：把 S13 从“能用”推进到“美观、高效、可演示”。
@@ -317,6 +420,14 @@
 - 30 分钟演示不会暴露明显 UI 断层。
 - trace、diff、KG、log 能在一个工作台中顺畅切换。
 
+当前落地：
+
+- product preview 已锁定统一状态 badge、pipeline、inspector tabs、keybindings 和 session replay 信息架构。
+- product workbench model 已支持焦点状态、inspector 前后切换、density toggle、layout 序列化/恢复和 action replay。
+- `verigen product-preview --tui --action focus-left,toggle-density` 可预览键盘操作后的工作台状态。
+- `ProductWorkbenchTuiComponent` 可把 terminal input 映射到 workbench action，不需要真实终端即可测试。
+- 仍需继续把状态模型接回 pi-tui/coding-agent 主界面和视觉 polish。
+
 ## S15：产品化交付闭环
 
 目标：支持正式演示、内部试用和后续商业化包装。
@@ -337,6 +448,18 @@
 
 - 新用户能按向导完成环境检查、创建项目、跑 demo、查看报告。
 - 演示人员能稳定复现完整 VeriGen workflow。
+
+当前落地：
+
+- onboarding steps 覆盖 doctor、provider config、template project 和 report export。
+- provider config page 固定内网 Anthropic-compatible endpoint 与 `kimi-for-coding`，API key 仍只走环境变量；`product-preview --provider-page` 可单独查看。
+- doctor repair suggestions 会把 doctor warn/error 转换为 required/optional 修复动作。
+- project templates 覆盖 counter、FSM、UART loopback、I2C skeleton；`product-template --id ... --output ...` 可生成 README、RTL、testbench 和 `verigen.json`。
+- board profile management 以 mock profile list、programmer、clock/reset 和 smoke actions 进入 workbench model；`product-preview --profiles` 可单独查看。
+- `verigen agent` 默认通过 `--extension` 加载内置 workbench extension；`createProductWorkbenchPiTuiMount()` 暴露 `@earendil-works/pi-tui` Component 适配契约；`@earendil-works/pi-verigen/coding-agent-extension` 和 `installVerigenCodingAgentExtension()` 可在 coding-agent `session_start`/`turn_end` 时挂入 below-editor widget，并注册 `/verigen-workbench show|hide|toggle|snapshot`。
+- `exportProductReportMarkdown()` 输出可分享报告；`createProductReportArtifact()` 和 `product-preview --report --output <path>` 可生成落盘 Markdown artifact。
+- report artifact 包含 onboarding、provider、layout、inspector snapshot、keybindings、release smoke 和 session replay。
+- session replay 记录 onboarding、template、sim、board、report 和 TUI action 事件。
 
 ## S16：Real FPGA Validation
 
@@ -362,8 +485,8 @@
 
 近期不要被真实 FPGA 设备阻塞。正确顺序是：
 
-1. 先做 **S5 + S6**，让 TUI 和 ToolRunner 有可观察、可调试的工程闭环。
-2. 再做 **S7 + S8**，让四 Agent 和上下文路由真正工作。
-3. 然后做 **S9 + S10**，用 board profile 抽象和 mock/dry-run backend 固化硬件接口。
-4. 继续做 **S11-S15**，进入发布、评测、成熟 TUI 和产品化交付。
+1. **S5 + S6 已完成 MVP**，TUI preview 和 ToolRunner 已有可观察、可调试的工程闭环。
+2. 继续补齐 **S7 + S8** 的真实任务覆盖、trace 注入、agent runtime 映射和 TUI inspector 接入。
+3. **S9 + S10 已完成 MVP**，硬件接口和 dry-run report 已稳定。
+4. **S11-S15 已完成 MVP**，离线 TUI dogfood、dist 包面预检和 pack/install smoke plan 已接入；后续继续做交互式 TUI polish、真实 npm pack/install smoke 和发布权限确认。
 5. 真实设备到位后做 **S16**，只替换 hardware backend，不重写产品层。

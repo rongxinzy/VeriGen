@@ -66,8 +66,15 @@ describe("S4 npm packaging surface", () => {
 		assert.ok(isRecord(parsed));
 		assert.ok(isRecord(parsed.bin));
 		assert.equal(parsed.bin.verigen, "./dist/cli.js");
+		assert.ok(isRecord(parsed.exports));
+		const codingAgentExtensionExport = parsed.exports["./coding-agent-extension"];
+		assert.ok(isRecord(codingAgentExtensionExport));
+		assert.equal(codingAgentExtensionExport.import, "./dist/verigen-coding-agent-extension.js");
+		assert.equal(codingAgentExtensionExport.types, "./dist/verigen-coding-agent-extension.d.ts");
 		assert.ok(Array.isArray(parsed.files));
 		assert.ok(parsed.files.includes("dist"));
+		assert.ok(parsed.files.includes("README.md"));
+		assert.ok(parsed.files.includes("CHANGELOG.md"));
 		assert.ok(isRecord(parsed.scripts));
 		const buildScript = parsed.scripts.build;
 		if (typeof buildScript !== "string") {
@@ -75,6 +82,15 @@ describe("S4 npm packaging surface", () => {
 		}
 		assert.match(buildScript, /copy-python-worker/);
 		assert.equal(parsed.scripts.prepack, "npm run build");
+		assert.ok(isRecord(parsed.dependencies));
+		assert.equal(parsed.dependencies["@earendil-works/pi-coding-agent"], "^0.78.1");
+		assert.equal(parsed.dependencies["@earendil-works/pi-tui"], "^0.78.1");
+
+		const copyScript = readFileSync(join(packageRoot, "scripts", "copy-python-worker.mjs"), "utf8");
+		assert.match(copyScript, /dist\/pi-assets/);
+		assert.match(copyScript, /\.pi\/prompts/);
+		assert.match(copyScript, /\.pi\/skills/);
+		assert.match(copyScript, /verigen-/);
 	});
 });
 

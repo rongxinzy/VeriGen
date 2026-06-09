@@ -13,11 +13,16 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		},
+		"./coding-agent-extension": {
+			"types": "./dist/verigen-coding-agent-extension.d.ts",
+			"import": "./dist/verigen-coding-agent-extension.js"
+		},
 		"./package.json": "./package.json"
 	},
 	"files": [
 		"dist",
-		"README.md"
+		"README.md",
+		"CHANGELOG.md"
 	],
 	"scripts": {
 		"clean": "shx rm -rf dist",
@@ -27,6 +32,8 @@
 		"prepublishOnly": "npm run clean && npm run build"
 	},
 	"dependencies": {
+		"@earendil-works/pi-coding-agent": "^0.78.1",
+		"@earendil-works/pi-tui": "^0.78.1",
 		"graphology": "0.26.0",
 		"vectra": "0.15.0",
 		"zod": "4.4.3"

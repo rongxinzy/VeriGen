@@ -5,7 +5,7 @@
  * This ensures lockstep versioning across the monorepo.
  */
 
-import { readFileSync, writeFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 const packagesDir = join(process.cwd(), 'packages');
@@ -19,6 +19,9 @@ const versionMap = {};
 
 for (const dir of packageDirs) {
 	const pkgPath = join(packagesDir, dir, 'package.json');
+	if (!existsSync(pkgPath)) {
+		continue;
+	}
 	try {
 		const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
 		packages[dir] = { path: pkgPath, data: pkg };

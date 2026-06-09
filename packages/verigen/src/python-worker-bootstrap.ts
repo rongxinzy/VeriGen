@@ -279,6 +279,19 @@ function commandCheck(name: string, result: CommandResult, required: boolean): D
 	};
 }
 
+function optionalEdaToolCheck(name: string, result: CommandResult, repair: string): DoctorCheck {
+	if (result.ok) {
+		return commandCheck(name, result, false);
+	}
+	return {
+		name,
+		state: "warn",
+		message: `${name} unavailable: ${result.stderr || result.stdout || "command failed"}. ${repair}`,
+		required: false,
+		details: { command: result.command, exitCode: result.exitCode ?? -1, repair },
+	};
+}
+
 export async function doctorVerigenInstall(
 	options: PythonWorkerBootstrapOptions & { repoRoot?: string } = {},
 ): Promise<VerigenDoctorResult> {
@@ -310,6 +323,12 @@ export async function doctorVerigenInstall(
 	checks.push(commandCheck("iverilog", iverilog, true));
 	const vvp = await commandProbe("vvp", ["-V"]);
 	checks.push(commandCheck("vvp", vvp, true));
+	const verilator = await commandProbe("verilator", ["--version"]);
+	checks.push(optionalEdaToolCheck("verilator", verilator, "Install Verilator to enable S6 lint profile."));
+	const yosys = await commandProbe("yosys", ["-V"]);
+	checks.push(optionalEdaToolCheck("yosys", yosys, "Install Yosys to enable S6 synth profile."));
+	const himasim = await commandProbe("himasim", ["--version"]);
+	checks.push(optionalEdaToolCheck("himasim", himasim, "Install Himasim when that simulator backend is available."));
 
 	let workerLaunch: PythonWorkerLaunch | undefined;
 	if (workerOk && uv.ok) {
