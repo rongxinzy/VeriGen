@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Aligned the npm release line with the already-published pi package baseline so VeriGen can publish as the default installable package.
+
 ## [0.78.2] - 2026-06-09
 
 ### Added
