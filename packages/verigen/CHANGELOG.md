@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Renamed local binary release artifacts from the inherited pi names to VeriGen names.
+
 ## [0.79.2] - 2026-06-09
 
 ### Fixed
