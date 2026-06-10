@@ -4,11 +4,17 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
-export type EdaToolProfile = "iverilog-vvp" | "verilator-lint" | "yosys-synth" | "himasim";
+export type EdaToolProfile = "iverilog-vvp" | "verilator-lint" | "yosys-synth" | "symbiyosys" | "himasim";
 
-export type EdaToolStage = "lint" | "sim" | "synth";
+export type EdaToolStage = "lint" | "sim" | "synth" | "prove";
 
-export type EdaToolIssueKind = "compile_error" | "sim_fail" | "width_warning" | "synth_fail" | "missing_tool";
+export type EdaToolIssueKind =
+	| "compile_error"
+	| "sim_fail"
+	| "width_warning"
+	| "synth_fail"
+	| "formal_fail"
+	| "missing_tool";
 
 export type EdaToolIssueSeverity = "error" | "warning";
 
@@ -85,6 +91,16 @@ export interface YosysSynthOptions {
 	workDir?: string;
 	keepWorkDir?: boolean;
 	yosysCommand?: string;
+}
+
+export interface SymbiYosysOptions {
+	rtl: EdaInputFile[];
+	top: string;
+	mode?: "bmc" | "prove";
+	depth?: number;
+	workDir?: string;
+	keepWorkDir?: boolean;
+	sbyCommand?: string;
 }
 
 export interface HimasimOptions {
@@ -469,6 +485,92 @@ export async function runYosysSynth(options: YosysSynthOptions): Promise<EdaTool
 			commands: [result],
 			issues,
 			artifacts: { workDir: materialized.workDir },
+		};
+	} finally {
+		if (materialized.cleanup) {
+			await rm(materialized.workDir, { recursive: true, force: true });
+		}
+	}
+}
+
+export async function runSymbiYosys(options: SymbiYosysOptions): Promise<EdaToolRunResult> {
+	const mode = options.mode ?? "bmc";
+	const depth = options.depth ?? 20;
+	const materialized = await materializeInputs(options.rtl, {
+		workDir: options.workDir,
+		keepWorkDir: options.keepWorkDir,
+		prefix: "verigen-sby-",
+	});
+	try {
+		const sbyPath = join(materialized.workDir, "formal.sby");
+		const scriptLines = [
+			`read -formal ${materialized.paths.map((p) => quoteYosysPath(p)).join(" ")}`,
+			`prep -top ${options.top}`,
+		];
+		const filesLines = materialized.paths.map((p) => basename(p));
+		const sbyContent = [
+			"[options]",
+			`mode ${mode}`,
+			`depth ${depth}`,
+			"",
+			"[engines]",
+			"smtbmc",
+			"",
+			"[script]",
+			...scriptLines,
+			"",
+			"[files]",
+			...filesLines,
+		].join("\n");
+		await writeFile(sbyPath, sbyContent);
+
+		const result = await runCommand(options.sbyCommand ?? "sby", ["-f", sbyPath], materialized.workDir, 300_000);
+		if (isMissingTool(result)) return issueFromMissingTool("symbiyosys", "prove", result);
+
+		const combined = `${result.stdout}\n${result.stderr}`;
+		const issues = parseLineIssues("sby", combined, "formal_fail", materialized.sources);
+
+		const statusPath = join(materialized.workDir, "output", "engine_0", "status");
+		let formalPass = false;
+		let formalOutput = "";
+		if (existsSync(statusPath)) {
+			formalOutput = readFileSync(statusPath, "utf8").trim();
+			formalPass = /PASS/i.test(formalOutput);
+		}
+
+		if (formalPass) {
+			return {
+				profile: "symbiyosys",
+				stage: "prove",
+				ok: true,
+				commands: [result],
+				issues: [],
+				artifacts: { workDir: materialized.workDir },
+			};
+		}
+
+		const traceVcd = join(materialized.workDir, "output", "engine_0", "trace.vcd");
+		if (!hasErrorIssue(issues) && !formalPass && formalOutput) {
+			issues.push({
+				kind: "formal_fail",
+				severity: "error",
+				tool: "sby",
+				message: formalOutput.includes("FAIL")
+					? `Formal ${mode} failed (depth ${depth})`
+					: `Formal ${mode} inconclusive: ${formalOutput}`,
+			});
+		}
+
+		return {
+			profile: "symbiyosys",
+			stage: "prove",
+			ok: false,
+			commands: [result],
+			issues: issues.length > 0 ? issues : [fallbackIssue("sby", "formal_fail", combined.slice(0, 500))],
+			artifacts: {
+				workDir: materialized.workDir,
+				...(existsSync(traceVcd) ? { vcdPath: traceVcd } : {}),
+			},
 		};
 	} finally {
 		if (materialized.cleanup) {

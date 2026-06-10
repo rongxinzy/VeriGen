@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added Graphify coding-agent tools and `/init` project map generation so VeriGen sessions can rebuild and query repo context directly.
+- Added DAG-based quality-probe generation mode, routed context injection, and recent failure records for fix-loop iterations.
+- Added a SymbiYosys formal verification ToolRunner profile.
+- Added bundled `uv`/`uvx`, install scripts, and install-time Python worker prewarming for Windows, macOS, and Linux.
+
+### Changed
+
+- Changed `verigen agent` to preserve the user's selected model instead of injecting a default Kimi model.
+- Changed Python worker and Graphify bootstrap paths to prefer bundled native tools before PATH fallbacks.
+
+### Fixed
+
+- Fixed the `verigen` package dependency surface by declaring its direct `typebox` dependency.
+
 ## [0.79.7] - 2026-06-10
 
 ### Fixed

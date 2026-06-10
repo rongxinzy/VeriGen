@@ -463,6 +463,7 @@ describe("S11-S15 productization layer", () => {
 				providerName = name;
 				providerModel = config.models?.[0]?.id;
 			},
+			registerTool: () => {},
 			sendMessage: (message) => {
 				sentCustomType = message.customType;
 			},

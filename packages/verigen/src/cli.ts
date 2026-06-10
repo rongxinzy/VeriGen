@@ -87,6 +87,8 @@ Commands:
   graphify-update  Rebuild the Graphify index with uvx graphify
 
 Options:
+  --dag            Use DAG-based incremental generation
+  --planner-llm    Use LLM to plan the signal-level DAG (dag mode only)
   --no-bootstrap   Do not create the Python worker cache venv
   --force          Recreate the Python worker cache venv
   --json           Print machine-readable JSON
@@ -160,7 +162,9 @@ function numberOption(args: string[], flag: string): number | undefined {
 
 function positionalArgs(args: string[]): string[] {
 	const booleanFlags = new Set([
+		"--dag",
 		"--json",
+		"--planner-llm",
 		"--no-bootstrap",
 		"--force",
 		"--help",
@@ -462,6 +466,8 @@ async function runQualityProbe(args: string[]): Promise<number> {
 		}
 		const result = await runCodegenQualityProbeFixLoop(caseId, {
 			live: hasFlag(args, "--live"),
+			dag: hasFlag(args, "--dag"),
+			plannerLlm: hasFlag(args, "--planner-llm"),
 			repoRoot: process.cwd(),
 			baseUrl: optionValue(args, "--base-url"),
 			model: optionValue(args, "--model"),

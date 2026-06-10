@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type {
 	ExtensionCommandContext,
 	ExtensionContext,
@@ -5,8 +8,18 @@ import type {
 	MessageRenderer,
 	ProviderConfig,
 	Theme,
+	ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
+import type { TSchema } from "typebox";
+import { createDefaultGraphifyContext } from "./graphify-context.ts";
+import {
+	createGraphifyExplainToolDefinition,
+	createGraphifyPathToolDefinition,
+	createGraphifyQueryToolDefinition,
+	createGraphifyStatusToolDefinition,
+	createGraphifyUpdateToolDefinition,
+} from "./graphify-tools.ts";
 import { createProductWorkbenchPiTuiComponent } from "./s15-product-tui.ts";
 import {
 	createProductWorkbenchModel,
@@ -43,6 +56,9 @@ export interface VerigenWorkbenchExtensionApi {
 	registerCommand(name: string, options: VerigenWorkbenchExtensionCommand): void;
 	registerMessageRenderer<T = unknown>(customType: string, renderer: MessageRenderer<T>): void;
 	registerProvider(name: string, config: ProviderConfig): void;
+	registerTool<TParams extends TSchema = TSchema, TDetails = unknown, TState = unknown>(
+		tool: ToolDefinition<TParams, TDetails, TState>,
+	): void;
 	sendMessage<T = unknown>(
 		message: {
 			customType: string;
@@ -207,6 +223,12 @@ export function installVerigenCodingAgentExtension(
 	let visible = extensionOptions(options).autoMount;
 	pi.registerProvider(VERIGEN_KIMI_PROVIDER_ID, verigenProviderConfig(extensionOptions(options).env));
 
+	pi.registerTool(createGraphifyStatusToolDefinition());
+	pi.registerTool(createGraphifyQueryToolDefinition());
+	pi.registerTool(createGraphifyExplainToolDefinition());
+	pi.registerTool(createGraphifyPathToolDefinition());
+	pi.registerTool(createGraphifyUpdateToolDefinition());
+
 	pi.registerMessageRenderer<ProductWorkbenchModel>(VERIGEN_WORKBENCH_CUSTOM_TYPE, (message) => {
 		const model = isProductWorkbenchModel(message.details) ? message.details : productWorkbenchModel(options);
 		return createProductWorkbenchPiTuiComponent(model, { height: extensionOptions(options).height });
@@ -276,6 +298,120 @@ export function installVerigenCodingAgentExtension(
 		description: "Show VeriGen model setup guidance",
 		handler: async (_args, ctx) => {
 			ctx.ui.notify(modelSetupGuide(extensionOptions(options).env), "info");
+		},
+	});
+
+	pi.registerCommand("init", {
+		description:
+			"Initialize the project: build the Graphify context graph and generate AGENTS.md with a navigation map",
+		handler: async (args, ctx) => {
+			const cwd = ctx.cwd;
+			const candidates = [".claude/CLAUDE.md", "CLAUDE.md", "AGENTS.md"];
+			const existing = candidates.find((name) => existsSync(join(cwd, name)));
+			const targetName = existing ?? "AGENTS.md";
+			const targetPath = join(cwd, targetName);
+			const force = args.trim() === "--force";
+
+			if (existing && !force) {
+				const ok = await ctx.ui.confirm(
+					"Overwrite?",
+					`${targetName} already exists. Overwrite it? Use /init --force to skip this prompt.`,
+				);
+				if (!ok) {
+					ctx.ui.notify("init cancelled", "info");
+					return;
+				}
+			}
+
+			ctx.ui.notify("Building Graphify context graph...", "info");
+
+			const gctx = createDefaultGraphifyContext(cwd);
+			const updateResult = await gctx.update();
+			if (!updateResult.ok) {
+				ctx.ui.notify(`Graphify update failed: ${updateResult.stderr.slice(0, 200)}`, "error");
+				return;
+			}
+
+			const gitignorePath = join(cwd, ".gitignore");
+			const gitignoreLine = "graphify-out/";
+			const gitignoreContent = existsSync(gitignorePath) ? await readFile(gitignorePath, "utf8") : "";
+			const hasGitignoreEntry = gitignoreContent
+				.split("\n")
+				.some((line) => line.trim() === gitignoreLine || line.trim() === "graphify-out");
+			if (!hasGitignoreEntry) {
+				const separator = gitignoreContent.length > 0 && !gitignoreContent.endsWith("\n") ? "\n" : "";
+				await writeFile(gitignorePath, `${gitignoreContent}${separator}${gitignoreLine}\n`, "utf8");
+			}
+
+			const status = await gctx.status();
+			const topNodes = (await gctx.query("source test doc config readme package", 20)).nodes;
+			const docNodes = (await gctx.query("documentation spec architecture design guide", 10)).nodes;
+			const allNodeIds = new Set<string>();
+			for (const node of [...topNodes, ...docNodes]) {
+				allNodeIds.add(node.id);
+			}
+
+			let packageScripts = "";
+			const pkgPath = join(cwd, "package.json");
+			if (existsSync(pkgPath)) {
+				try {
+					const pkgText = await readFile(pkgPath, "utf8");
+					const pkg = JSON.parse(pkgText);
+					const scripts = pkg.scripts as Record<string, string> | undefined;
+					if (scripts) {
+						const entries = Object.entries(scripts)
+							.filter(([name]) => !name.startsWith("pre") && !name.startsWith("post"))
+							.slice(0, 10);
+						if (entries.length > 0) {
+							packageScripts = entries.map(([name, cmd]) => `- \`${name}\`: ${cmd}`).join("\n");
+						}
+					}
+				} catch {
+					// ignore
+				}
+			}
+
+			const mapLines: string[] = [];
+			for (const node of [...topNodes, ...docNodes]) {
+				const path = node.path ? ` (\`${node.path}\`)` : "";
+				const summary = node.summary ? ` — ${node.summary}` : "";
+				mapLines.push(`- \`${node.id}\`${path}${summary}`);
+			}
+
+			const lines: string[] = [
+				"# Agent Instructions",
+				"",
+				`> Auto-generated by \`/init\` on ${new Date().toISOString().slice(0, 10)}.`,
+				`> Graphify index: ${status.nodeCount} nodes, ${status.edgeCount} edges.`,
+				`> Run \`/init\` again after significant project changes to rebuild this map.`,
+				"",
+				"## Graphify Navigation",
+				"",
+				"Graphify is a repo/docs context graph that helps you navigate this project.",
+				"Use these tools to explore the codebase before reading files directly:",
+				"",
+				"- `graphify-status` — check whether the graph index is ready",
+				'- `graphify-query` — search the graph by natural language (e.g. `graphify-query query: "where are the tests"`)',
+				"- `graphify-explain` — explore relationships around a file or concept",
+				"- `graphify-path` — find indirect connections between two nodes",
+				"- `graphify-update` — rebuild the index after file changes",
+				"",
+			];
+
+			if (packageScripts) {
+				lines.push("## Common Commands", "", packageScripts, "");
+			}
+
+			lines.push("## Project Map", "");
+			if (mapLines.length > 0) {
+				lines.push(...mapLines);
+			} else {
+				lines.push("_Run `graphify-query` to discover the project structure._");
+			}
+			lines.push("");
+
+			await writeFile(targetPath, `${lines.join("\n")}\n`, "utf8");
+			ctx.ui.notify(`Wrote ${targetName} (${status.nodeCount} graph nodes, ${status.edgeCount} edges)`, "info");
 		},
 	});
 }

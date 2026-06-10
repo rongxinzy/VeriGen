@@ -19,8 +19,10 @@ export {
 	type IverilogVvpOptions,
 	runHimasim,
 	runIverilogVvp,
+	runSymbiYosys,
 	runVerilatorLint,
 	runYosysSynth,
+	type SymbiYosysOptions,
 	type VerilatorLintOptions,
 	type YosysSynthOptions,
 } from "./eda-toolrunner.ts";
@@ -122,6 +124,8 @@ export {
 	type VerigenTuiRenderable,
 } from "./s5-tui.ts";
 export {
+	type FixLoopFailureRecord,
+	loadRecentFailures,
 	type RunCodegenQualityProbeFixLoopOptions,
 	renderVerigenFixLoopReport,
 	runCodegenQualityProbeFixLoop,
@@ -291,6 +295,20 @@ export {
 	specKgEdgeTypes,
 	specKgNodeTypes,
 } from "./spec-kg.ts";
+export {
+	assembleRtl,
+	buildIncrementalPrompt,
+	buildModuleHeader,
+	buildPlannerPrompt,
+	buildPortDeclarations,
+	buildTaskDag,
+	generateRtlViaDag,
+	generateTaskDagViaLlm,
+	type SignalContext,
+	type TaskDag,
+	type TaskDagNode,
+	topologicalSort,
+} from "./task-dag.ts";
 export type {
 	BuildControlflowArgs,
 	BuildControlflowResult,

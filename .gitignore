@@ -30,6 +30,7 @@ packages/*/dist-firefox/
 coverage/
 .nyc_output/
 .pi_config/
+.verigen/
 tui-debug.log
 compaction-results/
 .opencode/
@@ -41,6 +42,7 @@ packages/coding-agent/binaries/
 packages/verigen/binaries/
 packages/verigen/.cache/
 packages/verilog-analysis/requirements.lock.txt
+packages/verilog-analysis/build/
 packages/verilog-analysis/wheelhouse/
 todo.md
 plans/

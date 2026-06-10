@@ -1,4 +1,9 @@
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { DebuggerTraceContext } from "./context-router.ts";
 import { type EdaToolIssue, type EdaToolIssueKind, type EdaToolRunResult, runIverilogVvp } from "./eda-toolrunner.ts";
+import { createDefaultGraphifyContext, type GraphifyContext } from "./graphify-context.ts";
+import { defaultPlaybookIndexPath, defaultPlaybookRules, PlaybookRag } from "./playbook-rag.ts";
 import {
 	buildCodegenQualityProbePrompt,
 	buildCodegenQualityProbeTestbench,
@@ -10,6 +15,14 @@ import {
 	normalizeGeneratedRtl,
 	type RunCodegenQualityProbeOptions,
 } from "./quality-probe.ts";
+import {
+	type BuildVerigenRoutedContextOptions,
+	buildVerigenRoutedContext,
+	type VerigenGraphifyProvider,
+	type VerigenPlaybookProvider,
+} from "./s8-context-router.ts";
+import { SpecAnchoredKnowledgeGraph } from "./spec-kg.ts";
+import { generateRtlViaDag } from "./task-dag.ts";
 
 export type VerigenLoopAgent = "planner" | "coder" | "verifier" | "debugger";
 
@@ -66,6 +79,9 @@ export interface VerigenFixLoopEvent {
 
 export interface RunCodegenQualityProbeFixLoopOptions extends RunCodegenQualityProbeOptions {
 	maxRounds?: number;
+	dag?: boolean;
+	plannerLlm?: boolean;
+	context?: boolean;
 	generateRtl?: VerigenCoder;
 }
 
@@ -80,6 +96,155 @@ export interface VerigenFixLoopReport {
 	failureType?: VerigenFixLoopFailureType;
 	events: VerigenFixLoopEvent[];
 	llm?: CodegenProbeLlmConfig;
+}
+
+export interface FixLoopFailureRecord {
+	caseId: string;
+	spec: string;
+	moduleName: string;
+	timestamp: string;
+	maxRounds: number;
+	attempts: Array<{
+		round: number;
+		rtl: string;
+		failureType: string;
+		toolOutput: string;
+	}>;
+	failureType: string;
+}
+
+function failuresDir(repoRoot: string): string {
+	return join(repoRoot, ".verigen", "failures");
+}
+
+async function saveFailureRecord(repoRoot: string, record: FixLoopFailureRecord): Promise<string> {
+	const dir = failuresDir(repoRoot);
+	await mkdir(dir, { recursive: true });
+	const fileName = `${record.caseId}-${record.timestamp.replace(/[:.]/g, "-")}.json`;
+	const filePath = join(dir, fileName);
+	await writeFile(filePath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+	return filePath;
+}
+
+export async function loadRecentFailures(repoRoot: string, maxFiles = 3): Promise<FixLoopFailureRecord[]> {
+	const dir = failuresDir(repoRoot);
+	try {
+		const entries = await readdir(dir);
+		const jsonFiles = entries
+			.filter((e) => e.endsWith(".json"))
+			.sort()
+			.reverse()
+			.slice(0, maxFiles);
+		const records: FixLoopFailureRecord[] = [];
+		for (const file of jsonFiles) {
+			try {
+				const content = await readFile(join(dir, file), "utf8");
+				const parsed = JSON.parse(content) as FixLoopFailureRecord;
+				records.push(parsed);
+			} catch {
+				// skip corrupt files
+			}
+		}
+		return records;
+	} catch {
+		return [];
+	}
+}
+
+function formatFailureIcl(records: FixLoopFailureRecord[]): string {
+	if (records.length === 0) return "";
+	return [
+		"## Recent similar failure patterns",
+		"",
+		...records.flatMap((r) => [
+			`- Case: ${r.caseId} (${r.failureType}, ${r.attempts.length} attempt(s))`,
+			`  Spec: ${r.spec.slice(0, 120)}`,
+			`  Last RTL errors: ${r.attempts.map((a) => a.failureType).join(", ")}`,
+		]),
+	].join("\n");
+}
+
+export interface FixLoopContextProviders {
+	kg: SpecAnchoredKnowledgeGraph;
+	playbook: VerigenPlaybookProvider;
+	graphify: VerigenGraphifyProvider;
+	graphifyCtx: GraphifyContext;
+}
+
+function buildKgFromPlan(plan: VerigenAgentPlan): SpecAnchoredKnowledgeGraph {
+	const kg = new SpecAnchoredKnowledgeGraph();
+	const moduleNode = plan.kgSeed.find((n) => n.kind === "module");
+	const portNodes = plan.kgSeed.filter((n) => n.kind === "port");
+	const constraintNodes = plan.kgSeed.filter((n) => n.kind === "constraint");
+
+	for (const node of plan.kgSeed) {
+		if (node.kind === "module") {
+			kg.addNode({ id: node.id, type: "Module", name: node.label });
+		} else if (node.kind === "port") {
+			kg.addNode({
+				id: node.id,
+				type: "Port",
+				name: node.label,
+				metadata: { direction: node.label.split(" ")[0], name: node.label.split(" ")[1] },
+			});
+		} else if (node.kind === "constraint") {
+			kg.addNode({ id: node.id, type: "Constraint", name: node.label });
+		}
+	}
+
+	if (moduleNode) {
+		for (const port of portNodes) {
+			kg.addEdge({ source: moduleNode.id, target: port.id, type: "HAS_PORT" });
+		}
+		for (const constraint of constraintNodes) {
+			kg.addEdge({ source: moduleNode.id, target: constraint.id, type: "CONSTRAINED_BY" });
+		}
+	}
+
+	return kg;
+}
+
+async function buildFixLoopProviders(plan: VerigenAgentPlan, repoRoot: string): Promise<FixLoopContextProviders> {
+	const kg = buildKgFromPlan(plan);
+
+	const playbookIndexPath = defaultPlaybookIndexPath(repoRoot);
+	const playbook = new PlaybookRag(playbookIndexPath);
+	await playbook.indexRules(defaultPlaybookRules);
+
+	const graphifyCtx = createDefaultGraphifyContext(repoRoot);
+	const graphify: VerigenGraphifyProvider = {
+		query: (query, maxResults) => graphifyCtx.query(query, maxResults),
+	};
+
+	return { kg, playbook, graphify, graphifyCtx };
+}
+
+function buildRoutedContextForRound(
+	providers: FixLoopContextProviders,
+	plan: VerigenAgentPlan,
+	role: "coder" | "debugger",
+	triggers: string[],
+	toolResults?: EdaToolRunResult[],
+	trace?: DebuggerTraceContext,
+): Promise<import("./s8-context-router.ts").VerigenRoutedContext> {
+	const options: BuildVerigenRoutedContextOptions = {
+		task: `${plan.title}: ${plan.spec}`,
+		role,
+		kg: providers.kg,
+		kgSeeds: plan.kgSeed.map((n) => n.id),
+		playbook: providers.playbook,
+		graphify: providers.graphify,
+		triggers,
+	};
+
+	if (toolResults && toolResults.length > 0) {
+		options.toolResults = toolResults;
+	}
+	if (trace) {
+		options.trace = trace;
+	}
+
+	return buildVerigenRoutedContext(options);
 }
 
 function clampMaxRounds(value: number | undefined): number {
@@ -306,6 +471,11 @@ async function generateAttemptRtl(
 	input: VerigenCoderInput,
 	options: RunCodegenQualityProbeFixLoopOptions,
 ): Promise<{ rtl: string; llm?: CodegenProbeLlmConfig }> {
+	if (options.dag) {
+		const probeCase = getCodegenQualityProbeCase(input.plan.caseId);
+		const generated = await generateRtlViaDag(probeCase, { ...options, plannerLlm: options.plannerLlm });
+		return { rtl: generated.generatedRtl, llm: generated.llm };
+	}
 	if (options.generateRtl) {
 		return { rtl: normalizeGeneratedRtl(await options.generateRtl(input)) };
 	}
@@ -323,6 +493,8 @@ export async function runCodegenQualityProbeFixLoop(
 	const probeCase = getCodegenQualityProbeCase(caseId);
 	const plan = planFromProbeCase(probeCase);
 	const maxRounds = clampMaxRounds(options.maxRounds);
+	const contextEnabled = options.context ?? true;
+	const repoRoot = options.repoRoot ?? process.cwd();
 	const attempts: VerigenFixLoopAttempt[] = [];
 	const events: VerigenFixLoopEvent[] = [
 		{
@@ -333,10 +505,34 @@ export async function runCodegenQualityProbeFixLoop(
 	];
 	let previousFeedback: VerigenDebuggerFeedback | undefined;
 	let llm: CodegenProbeLlmConfig | undefined;
+	const providers = contextEnabled ? await buildFixLoopProviders(plan, repoRoot) : undefined;
+
+	if (providers) {
+		events.push({
+			agent: "planner",
+			action: "context_ready",
+			summary: "KG, Playbook, and Graphify providers initialized",
+		});
+	}
 
 	for (let round = 1; round <= maxRounds; round += 1) {
-		const coderPrompt = previousFeedback?.repairPrompt ?? buildCodegenQualityProbePrompt(probeCase);
-		events.push({ agent: "coder", round, action: "generate", summary: `Generated candidate RTL round ${round}` });
+		let coderPrompt = previousFeedback?.repairPrompt ?? buildCodegenQualityProbePrompt(probeCase);
+		const triggers = [probeCase.level, probeCase.category, ...probeCase.moduleContract.notes];
+
+		if (providers && !previousFeedback) {
+			const routed = await buildRoutedContextForRound(providers, plan, "coder", triggers);
+			const recentFailures = await loadRecentFailures(repoRoot, 2);
+			const failureIcl = formatFailureIcl(recentFailures);
+			coderPrompt = `${routed.rendered}\n\n${failureIcl}\n\n${coderPrompt}`;
+		}
+
+		const generateMode = options.dag ? "dag" : "flat";
+		events.push({
+			agent: "coder",
+			round,
+			action: "generate",
+			summary: `Generated candidate RTL round ${round} (${generateMode}${providers ? "+context" : ""})`,
+		});
 		const generated = await generateAttemptRtl(
 			{ plan, round, maxRounds, prompt: coderPrompt, previousFeedback },
 			options,
@@ -371,6 +567,10 @@ export async function runCodegenQualityProbeFixLoop(
 		}
 
 		const debuggerFeedback = buildRepairPrompt(plan, round, maxRounds, generated.rtl, verifierResult);
+		if (providers) {
+			const routed = await buildRoutedContextForRound(providers, plan, "debugger", triggers, [verifierResult]);
+			debuggerFeedback.repairPrompt = `${routed.rendered}\n\n${debuggerFeedback.repairPrompt}`;
+		}
 		events.push({
 			agent: "debugger",
 			round,
@@ -390,8 +590,31 @@ export async function runCodegenQualityProbeFixLoop(
 
 	const lastAttempt = attempts[attempts.length - 1];
 	const lastFailure = lastAttempt?.failureType ?? "max_rounds";
+	const status = lastFailure === "missing_tool" ? "missing_tool" : "fail";
+
+	if (status === "fail" || status === "missing_tool") {
+		const record: FixLoopFailureRecord = {
+			caseId: plan.caseId,
+			spec: plan.spec,
+			moduleName: plan.moduleContract.moduleName,
+			timestamp: new Date().toISOString(),
+			maxRounds,
+			attempts: attempts.map((a) => ({
+				round: a.round,
+				rtl: a.rtl.slice(0, 2000),
+				failureType: a.failureType ?? "unknown",
+				toolOutput: a.verifierResult.issues
+					.map((i) => i.message)
+					.join("; ")
+					.slice(0, 500),
+			})),
+			failureType: lastFailure,
+		};
+		await saveFailureRecord(repoRoot, record).catch(() => {});
+	}
+
 	return {
-		status: lastFailure === "missing_tool" ? "missing_tool" : "fail",
+		status,
 		case: probeCase,
 		plan,
 		maxRounds,
