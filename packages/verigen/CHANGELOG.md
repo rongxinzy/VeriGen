@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed the release test for `verigen --version` so it passes from both the repository root and the package directory.
+
 ## [0.79.6] - 2026-06-10
 
 ### Added
