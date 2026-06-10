@@ -1,6 +1,6 @@
 {
 	"name": "verigen",
-	"version": "0.79.2",
+	"version": "0.79.3",
 	"description": "Verilog-specialized coding agent with RTL generation, simulation, tracing, and repair workflows",
 	"type": "module",
 	"bin": {
