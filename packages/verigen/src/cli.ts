@@ -57,7 +57,10 @@ import { buildVerigenAgentLaunch, runVerigenAgent } from "./verigen-agent-launch
 import { VerilogAnalysis } from "./verilog-analysis-client.ts";
 
 function printHelp(): void {
-	console.log(`Usage: verigen <command> [options]
+	console.log(`Usage: verigen [command] [options]
+
+Default:
+  verigen          Launch the interactive S15 product workbench TUI
 
 Commands:
   agent            Launch the original pi coding-agent with VeriGen prompts and skill loaded
@@ -99,8 +102,8 @@ Options:
   --base-url URL   Override VERIGEN_TEST_LLM_BASE_URL for quality-probe run
   --max-tokens N   Override max output tokens for quality-probe run
   --max-rounds N   Max S7 fix-loop rounds, capped at 3
-  --width N        Render width for tui-preview
-  --height N       Render height for product-preview --tui
+  --width N        Render width for TUI previews and product workbench
+  --height N       Render height for product workbench TUI
   --focus PANE     Product workbench focus pane: left, center, or right
   --inspector ID   Product workbench inspector tab id
   --density MODE   Product workbench density: compact or comfortable
@@ -123,7 +126,7 @@ Options:
   --cache-dir PATH   Temporary VERIGEN_CACHE_DIR for worker smoke
   --interactive    Launch product-preview as an interactive TUI
   --report         Print product report markdown instead of workbench preview
-  --tui            Print product workbench TUI layout preview
+  --tui            Launch product workbench TUI on terminals, otherwise print layout preview
   --dry-run        Print the resolved verigen agent launch command without running it
   --pi-command CMD Override the pi command used by verigen agent
   --max-results N  Limit Graphify query/explain results
@@ -699,6 +702,8 @@ async function runProductPreview(args: string[]): Promise<number> {
 		createProductWorkbenchModel({ doctor, evaluation, hardwareFlow, release }),
 		args,
 	);
+	const width = numberOption(args, "--width") ?? process.stdout.columns ?? 120;
+	const height = numberOption(args, "--height") ?? 36;
 	if (hasFlag(args, "--show-layout")) {
 		console.log(serializeWorkbenchLayout(model.layout));
 		return 0;
@@ -712,7 +717,7 @@ async function runProductPreview(args: string[]): Promise<number> {
 		return 0;
 	}
 	if (hasFlag(args, "--interactive")) {
-		await runProductWorkbenchTui(model, { height: numberOption(args, "--height") });
+		await runProductWorkbenchTui(model, { width, height });
 		return 0;
 	}
 	if (hasFlag(args, "--json")) {
@@ -727,13 +732,11 @@ async function runProductPreview(args: string[]): Promise<number> {
 			console.log(exportProductReportMarkdown(model));
 		}
 	} else if (hasFlag(args, "--tui")) {
-		console.log(
-			renderProductWorkbenchTui(
-				model,
-				numberOption(args, "--width") ?? process.stdout.columns ?? 120,
-				numberOption(args, "--height") ?? 36,
-			),
-		);
+		if (process.stdin.isTTY && process.stdout.isTTY) {
+			await runProductWorkbenchTui(model, { width, height });
+			return 0;
+		}
+		console.log(renderProductWorkbenchTui(model, width, height));
 	} else {
 		console.log(renderProductWorkbenchPreview(model));
 	}
@@ -771,7 +774,10 @@ async function runProductWorkbench(args: string[]): Promise<number> {
 		createProductWorkbenchModel({ doctor, evaluation, hardwareFlow, release }),
 		args,
 	);
-	await runProductWorkbenchTui(model, { height: numberOption(args, "--height") });
+	await runProductWorkbenchTui(model, {
+		width: numberOption(args, "--width"),
+		height: numberOption(args, "--height"),
+	});
 	return 0;
 }
 
@@ -897,12 +903,20 @@ async function runGraphifyUpdate(args: string[]): Promise<number> {
 	return result.ok ? 0 : 1;
 }
 
+async function runDefault(): Promise<number> {
+	if (process.stdin.isTTY && process.stdout.isTTY) {
+		return await runProductWorkbench([]);
+	}
+	return await runProductPreview(["--tui"]);
+}
+
 async function main(args: string[]): Promise<number> {
-	const command = args[0] ?? "doctor";
-	if (command === "--help" || command === "-h" || hasFlag(args, "--help")) {
+	if (args[0] === "--help" || args[0] === "-h" || hasFlag(args, "--help")) {
 		printHelp();
 		return 0;
 	}
+	if (args.length === 0) return await runDefault();
+	const command = args[0] ?? "";
 	if (command === "agent") return await runAgent(args.slice(1));
 	if (command === "mode") return await runMode(args.slice(1));
 	if (command === "doctor") return await runDoctor(args.slice(1));

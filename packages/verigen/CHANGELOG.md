@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Launched the product workbench TUI by default for bare `verigen`, with static workbench output preserved for non-TTY calls.
+
+### Fixed
+
+- Kept `verigen product-preview --tui` interactive on real terminals while preserving static layout output for redirected/non-TTY runs.
+
 ## [0.79.3] - 2026-06-10
 
 ### Fixed
