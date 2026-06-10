@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
 	buildCodegenQualityProbePrompt,
 	buildVerigenAgentEnv,
@@ -346,7 +347,8 @@ describe("S5 VeriGen agent launcher", () => {
 	});
 
 	test("prints the VeriGen package version instead of forwarding --version to pi", () => {
-		const result = spawnSync(process.execPath, ["--import", "tsx", "packages/verigen/src/cli.ts", "--version"], {
+		const cliPath = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+		const result = spawnSync(process.execPath, ["--import", "tsx", cliPath, "--version"], {
 			cwd: process.cwd(),
 			encoding: "utf8",
 		});
