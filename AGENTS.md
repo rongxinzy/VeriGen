@@ -117,6 +117,10 @@ Attribution:
 - Internal (from issues): `Fixed foo bar ([#123](https://github.com/earendil-works/pi-mono/issues/123))`
 - External contributions: `Added feature X ([#456](https://github.com/earendil-works/pi-mono/pull/456) by [@username](https://github.com/username))`
 
+## Documentation
+
+- When changing install, release, npm package, quickstart, or externally visible usage instructions, update and review both root `README.md` and `packages/verigen/README.md`. Do not treat the package README as a substitute for the primary repository README.
+
 ## Releasing
 
 **Lockstep versioning**: all packages share one version; every release updates all together. `patch` = fixes + additions, `minor` = breaking changes. No major releases.

@@ -78,15 +78,25 @@ VeriGen TypeScript 主体
 
 ### 安装
 
+Windows PowerShell 一键安装：
+
+```powershell
+irm https://raw.githubusercontent.com/rongxinzy/VeriGen/main/packages/verigen/install.ps1 | iex
+```
+
+该脚本会检测 Node.js/npm 版本、提示安装 Git Bash、通过 `https://registry.npmmirror.com` 安装 npm 包，并提前用包内 bundled `uv` 创建 Python worker venv 和依赖。若 Node.js/npm 缺失或版本不满足，脚本会输出 Chocolatey + Node.js `24.16.0` 安装命令。
+
+通用 npm 安装：
+
 ```bash
-npm install -g verigen
+npm install -g verigen@latest
 
 verigen doctor          # 环境诊断
 verigen worker-smoke    # 验证 Python worker 可用
 verigen agent           # 进入 VeriGen agent
 ```
 
-首次运行时 CLI 会用 `uv` 把包内 Python worker 自举到受管 cache venv，无需手动配置 Python 环境（详见 [npm 分发策略](#npm-分发策略)）。
+安装脚本会提前创建 Python worker cache venv；如果预热失败，首次运行时 CLI 仍会用包内 bundled `uv` 把包内 Python worker 自举到受管 cache venv，无需手动配置 Python 环境（详见 [npm 分发策略](#npm-分发策略)）。
 
 ### 本地开发
 
