@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed the cross-platform binary build step to bypass npm minimum release age checks for its temporary native binding install.
+- Fixed binary compilation by declaring the direct Transformers dependency required by the Vectra integration.
+
 ## [0.79.9] - 2026-06-10
 
 ### Fixed

@@ -93,16 +93,31 @@ if [[ "$SKIP_DEPS" == "false" ]]; then
     CLIPBOARD_VERSION=$(node -p "require('./packages/coding-agent/package.json').optionalDependencies['@mariozechner/clipboard']")
     # npm ci only installs optional deps for the current platform
     # We need the base clipboard package and all platform bindings for bun cross-compilation
-    # Use --force to bypass platform checks (os/cpu restrictions in package.json)
-    # Install all in one command to avoid npm removing packages from previous installs
-    npm install --include=optional --no-save --package-lock=false --force --ignore-scripts \
-        @mariozechner/clipboard@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-darwin-arm64@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-darwin-x64@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-linux-x64-gnu@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-linux-arm64-gnu@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-win32-x64-msvc@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-win32-arm64-msvc@"$CLIPBOARD_VERSION"
+    # Do not use npm install here: it reifies the whole node_modules tree and
+    # can prune peer dependencies needed by the subsequent bun compile step.
+    install_npm_tarball() {
+        local package_spec="$1"
+        local package_name="${package_spec%@*}"
+        local package_dir="node_modules/$package_name"
+        local tmp_dir
+        local tarball
+
+        tmp_dir="$(mktemp -d)"
+        tarball="$(npm pack --ignore-scripts --min-release-age=0 --pack-destination "$tmp_dir" "$package_spec" | tail -n 1)"
+        mkdir -p "$(dirname "$package_dir")"
+        rm -rf "$package_dir"
+        mkdir -p "$package_dir"
+        tar -xzf "$tmp_dir/$tarball" -C "$package_dir" --strip-components=1
+        rm -rf "$tmp_dir"
+    }
+
+    install_npm_tarball @mariozechner/clipboard@"$CLIPBOARD_VERSION"
+    install_npm_tarball @mariozechner/clipboard-darwin-arm64@"$CLIPBOARD_VERSION"
+    install_npm_tarball @mariozechner/clipboard-darwin-x64@"$CLIPBOARD_VERSION"
+    install_npm_tarball @mariozechner/clipboard-linux-x64-gnu@"$CLIPBOARD_VERSION"
+    install_npm_tarball @mariozechner/clipboard-linux-arm64-gnu@"$CLIPBOARD_VERSION"
+    install_npm_tarball @mariozechner/clipboard-win32-x64-msvc@"$CLIPBOARD_VERSION"
+    install_npm_tarball @mariozechner/clipboard-win32-arm64-msvc@"$CLIPBOARD_VERSION"
 else
     echo "==> Skipping cross-platform native bindings (--skip-deps)"
 fi
