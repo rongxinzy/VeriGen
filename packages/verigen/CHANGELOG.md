@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed binary compilation by externalizing Vectra's unused optional Transformers peer dependency.
+
 ## [0.79.10] - 2026-06-10
 
 ### Fixed

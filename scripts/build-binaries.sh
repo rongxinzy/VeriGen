@@ -148,9 +148,9 @@ for platform in "${PLATFORMS[@]}"; do
     # Compile the VeriGen CLI entrypoint. Runtime assets are copied beside the
     # executable before the archive is created.
     if [[ "$platform" == windows-* ]]; then
-        bun build --compile --target=bun-$platform ./dist/cli.js --outfile "$OUTPUT_DIR/$platform/verigen.exe"
+        bun build --compile --external @huggingface/transformers --target=bun-$platform ./dist/cli.js --outfile "$OUTPUT_DIR/$platform/verigen.exe"
     else
-        bun build --compile --target=bun-$platform ./dist/cli.js --outfile "$OUTPUT_DIR/$platform/verigen"
+        bun build --compile --external @huggingface/transformers --target=bun-$platform ./dist/cli.js --outfile "$OUTPUT_DIR/$platform/verigen"
     fi
 done
 
