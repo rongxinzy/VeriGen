@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import {
 	buildCodegenQualityProbePrompt,
@@ -257,5 +257,29 @@ describe("S5 VeriGen agent launcher", () => {
 		assert.ok(launch.args.includes(join(promptDir, "verigen-coder.md")));
 		assert.ok(launch.args.includes("--skill"));
 		assert.ok(launch.args.includes(join(skillDir, "verigen-playbook.md")));
+	});
+
+	test("uses the installed pi coding-agent dist CLI instead of falling back to PATH", () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "verigen-s5-agent-installed-"));
+		tempDirs.push(tempDir);
+		const packageRoot = join(tempDir, "node_modules", "verigen");
+		const promptDir = join(packageRoot, "dist", "pi-assets", "prompts");
+		const skillDir = join(packageRoot, "dist", "pi-assets", "skills");
+		const dependencyCli = join(tempDir, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
+		mkdirSync(promptDir, { recursive: true });
+		mkdirSync(skillDir, { recursive: true });
+		mkdirSync(dirname(dependencyCli), { recursive: true });
+		writeFileSync(join(promptDir, "verigen-system.md"), "# system\n");
+		writeFileSync(join(promptDir, "verigen-coder.md"), "# coder\n");
+		writeFileSync(join(skillDir, "verigen-playbook.md"), "# playbook\n");
+		writeFileSync(join(packageRoot, "dist", "verigen-coding-agent-extension.js"), "export {};\n");
+		writeFileSync(dependencyCli, "#!/usr/bin/env node\n");
+
+		const launch = buildVerigenAgentLaunch({ packageRoot });
+
+		assert.equal(launch.command, process.execPath);
+		assert.equal(launch.args[0], dependencyCli);
+		assert.ok(launch.args.includes("--system-prompt"));
+		assert.ok(launch.args.includes("--extension"));
 	});
 });

@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added a compact `VERIGEN` ASCII startup banner for the chat-first TUI header.
+
+### Changed
+
+- Changed bare `verigen` to launch the chat-first coding-agent TUI instead of the product workbench dashboard.
+- Passed leading agent options such as `--approve` and `-p` through to the coding-agent default path.
+- Stopped auto-mounting the S15 product workbench dashboard in coding-agent sessions; use `/verigen-workbench show` when needed.
+
+### Fixed
+
+- Resolved the bundled pi coding-agent launcher from installed npm dependencies instead of falling back to PATH.
+- Added VeriGen playbook skill metadata so the chat-first TUI starts without a VeriGen skill warning.
+
 ## [0.79.4] - 2026-06-10
 
 ### Changed

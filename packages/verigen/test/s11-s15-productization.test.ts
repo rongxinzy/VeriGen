@@ -433,11 +433,12 @@ describe("S11-S15 productization layer", () => {
 		assert.match(mount.component.render(72).join("\n"), /Waveform/);
 	});
 
-	test("registers a coding-agent extension that mounts the workbench widget", async () => {
+	test("registers a coding-agent extension that mounts the workbench widget on command", async () => {
 		type WorkbenchHandler = Parameters<VerigenWorkbenchExtensionApi["on"]>[1];
 		const handlers = new Map<string, WorkbenchHandler>();
 		let command: VerigenWorkbenchExtensionCommand | undefined;
 		let rendererType: string | undefined;
+		let renderedHeader = "";
 		let widgetKey: string | undefined;
 		let widgetPlacement: string | undefined;
 		let renderedWidget = "";
@@ -471,6 +472,16 @@ describe("S11-S15 productization layer", () => {
 				setStatus: (_key: string, text: string | undefined) => {
 					statusText = text;
 				},
+				setHeader: (factory: unknown) => {
+					if (typeof factory !== "function") {
+						renderedHeader = "";
+						return;
+					}
+					const header = (
+						factory as (tui: unknown, theme: { fg: (_color: string, text: string) => string }) => WidgetComponent
+					)({}, { fg: (_color, text) => text });
+					renderedHeader = header.render(80).join("\n");
+				},
 				notify: () => {},
 			},
 		};
@@ -485,6 +496,12 @@ describe("S11-S15 productization layer", () => {
 		const startHandler = handlers.get("session_start");
 		assert.ok(startHandler);
 		await startHandler({ type: "session_start" }, fakeContext as unknown as ExtensionContext);
+		assert.match(renderedHeader, /VERIGEN|_____/);
+		assert.match(renderedHeader, /Verilog-specialized coding agent/);
+		assert.equal(widgetKey, undefined);
+		assert.equal(statusText, undefined);
+
+		await command.handler("show", fakeContext as unknown as ExtensionCommandContext);
 		assert.equal(widgetKey, "verigen-product-workbench");
 		assert.equal(widgetPlacement, "belowEditor");
 		assert.equal(statusText, "VeriGen S15 workbench");

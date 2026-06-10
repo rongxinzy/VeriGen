@@ -3,6 +3,7 @@ import type {
 	ExtensionContext,
 	ExtensionFactory,
 	MessageRenderer,
+	Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { createProductWorkbenchPiTuiComponent } from "./s15-product-tui.ts";
@@ -19,6 +20,7 @@ export interface VerigenCodingAgentExtensionOptions {
 	env?: ProductWorkbenchOptions["env"];
 	height?: number;
 	now?: string;
+	showHeader?: boolean;
 	statusKey?: string;
 	widgetKey?: string;
 	widgetPlacement?: "aboveEditor" | "belowEditor";
@@ -49,14 +51,61 @@ export interface VerigenWorkbenchExtensionApi {
 
 function extensionOptions(options: VerigenCodingAgentExtensionOptions): Required<VerigenCodingAgentExtensionOptions> {
 	return {
-		autoMount: options.autoMount ?? true,
+		autoMount: options.autoMount ?? false,
 		env: options.env ?? process.env,
 		height: options.height ?? 18,
 		now: options.now ?? new Date().toISOString(),
+		showHeader: options.showHeader ?? true,
 		statusKey: options.statusKey ?? "verigen",
 		widgetKey: options.widgetKey ?? "verigen-product-workbench",
 		widgetPlacement: options.widgetPlacement ?? "belowEditor",
 	};
+}
+
+const verigenAsciiLogo = [
+	"__     _______ ____  ___ ____ _____ _   _",
+	"\\ \\   / / ____|  _ \\|_ _/ ___| ____| \\ | |",
+	" \\ \\ / /|  _| | |_) || | |  _|  _| |  \\| |",
+	"  \\ V / | |___|  _ < | | |_| | |___| |\\  |",
+	"   \\_/  |_____|_| \\_\\___\\____|_____|_| \\_|",
+];
+
+function fitLine(line: string, width: number): string {
+	if (width <= 0) return "";
+	if (line.length <= width) return line;
+	if (width <= 1) return line.slice(0, width);
+	return `${line.slice(0, width - 1)}~`;
+}
+
+function centerLine(line: string, width: number): string {
+	const fitted = fitLine(line, width);
+	const padding = Math.max(0, Math.floor((width - fitted.length) / 2));
+	return `${" ".repeat(padding)}${fitted}`;
+}
+
+function mutedHint(width: number): string {
+	if (width < 56) return "RTL, tests, traces, FPGA bring-up.";
+	return "Ask for RTL, testbenches, waveform debug, or FPGA bring-up.";
+}
+
+function dashboardHint(width: number): string {
+	if (width < 56) return "/verigen-workbench show";
+	return "/verigen-workbench show opens the engineering dashboard.";
+}
+
+function renderVerigenStartupHeader(theme: Theme, width: number): string[] {
+	const columns = Math.max(1, width);
+	const compact = columns < 52;
+	const logoLines = compact ? ["VERIGEN"] : verigenAsciiLogo;
+	const title = compact ? "Verilog coding agent" : "Verilog-specialized coding agent";
+	return [
+		"",
+		...logoLines.map((line) => theme.fg("accent", centerLine(line, columns))),
+		theme.fg("muted", centerLine(title, columns)),
+		theme.fg("dim", centerLine(mutedHint(columns), columns)),
+		theme.fg("dim", centerLine(dashboardHint(columns), columns)),
+		"",
+	];
 }
 
 function productWorkbenchModel(options: VerigenCodingAgentExtensionOptions): ProductWorkbenchModel {
@@ -115,7 +164,7 @@ export function installVerigenCodingAgentExtension(
 	pi: VerigenWorkbenchExtensionApi,
 	options: VerigenCodingAgentExtensionOptions = {},
 ): void {
-	let visible = options.autoMount ?? true;
+	let visible = extensionOptions(options).autoMount;
 
 	pi.registerMessageRenderer<ProductWorkbenchModel>(VERIGEN_WORKBENCH_CUSTOM_TYPE, (message) => {
 		const model = isProductWorkbenchModel(message.details) ? message.details : productWorkbenchModel(options);
@@ -123,6 +172,12 @@ export function installVerigenCodingAgentExtension(
 	});
 
 	pi.on("session_start", (_event, ctx) => {
+		if (ctx.mode === "tui" && extensionOptions(options).showHeader) {
+			ctx.ui.setHeader((_tui, theme) => ({
+				render: (width: number) => renderVerigenStartupHeader(theme, width),
+				invalidate: () => {},
+			}));
+		}
 		if (!visible) return;
 		mountWorkbench(ctx, options);
 	});

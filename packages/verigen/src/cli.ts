@@ -60,10 +60,10 @@ function printHelp(): void {
 	console.log(`Usage: verigen [command] [options]
 
 Default:
-  verigen          Launch the interactive S15 product workbench TUI
+  verigen [agent options] Launch the VeriGen chat-first coding agent TUI
 
 Commands:
-  agent            Launch the original pi coding-agent with VeriGen prompts and skill loaded
+  agent            Launch the VeriGen chat-first coding agent
   mode             Print the VeriGen S5 mode/profile and pipeline stages
   doctor           Check Node, uv, iverilog/vvp, worker bootstrap, and Graphify status
   worker-smoke     Bootstrap the worker and run one parse_ast JSONL request
@@ -905,9 +905,10 @@ async function runGraphifyUpdate(args: string[]): Promise<number> {
 
 async function runDefault(): Promise<number> {
 	if (process.stdin.isTTY && process.stdout.isTTY) {
-		return await runProductWorkbench([]);
+		return await runAgent([]);
 	}
-	return await runProductPreview(["--tui"]);
+	printHelp();
+	return 0;
 }
 
 async function main(args: string[]): Promise<number> {
@@ -917,6 +918,7 @@ async function main(args: string[]): Promise<number> {
 	}
 	if (args.length === 0) return await runDefault();
 	const command = args[0] ?? "";
+	if (command.startsWith("-")) return await runAgent(args);
 	if (command === "agent") return await runAgent(args.slice(1));
 	if (command === "mode") return await runMode(args.slice(1));
 	if (command === "doctor") return await runDoctor(args.slice(1));

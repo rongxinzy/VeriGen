@@ -53,6 +53,30 @@ function firstExisting(paths: string[]): string | undefined {
 	return paths.find((candidate) => existsSync(candidate));
 }
 
+function nodeModuleSearchDirs(packageRoot: string): string[] {
+	const dirs = new Set<string>();
+	let current = resolve(packageRoot);
+	while (true) {
+		dirs.add(join(current, "node_modules"));
+		const parent = dirname(current);
+		if (parent === current) break;
+		current = parent;
+	}
+	for (const searchPath of requireFromHere.resolve.paths("@earendil-works/pi-coding-agent") ?? []) {
+		dirs.add(searchPath);
+	}
+	return [...dirs];
+}
+
+function resolveNodeModuleFile(packageRoot: string, packageName: string, relativeFile: string): string | undefined {
+	const packageParts = packageName.split("/");
+	for (const nodeModulesDir of nodeModuleSearchDirs(packageRoot)) {
+		const candidate = join(nodeModulesDir, ...packageParts, relativeFile);
+		if (existsSync(candidate)) return candidate;
+	}
+	return undefined;
+}
+
 function resolveRepoRoot(packageRoot: string): string {
 	return resolve(packageRoot, "../..");
 }
@@ -104,14 +128,9 @@ function resolvePiLauncher(packageRoot: string, piCommand?: string): { command: 
 		return { command: process.execPath, args: [sourceCli] };
 	}
 
-	try {
-		const packageJsonPath = requireFromHere.resolve("@earendil-works/pi-coding-agent/package.json");
-		const distCli = join(dirname(packageJsonPath), "dist", "cli.js");
-		if (existsSync(distCli)) {
-			return { command: process.execPath, args: [distCli] };
-		}
-	} catch {
-		// Fall back to PATH lookup below.
+	const dependencyCli = resolveNodeModuleFile(packageRoot, "@earendil-works/pi-coding-agent", join("dist", "cli.js"));
+	if (dependencyCli) {
+		return { command: process.execPath, args: [dependencyCli] };
 	}
 
 	const localBin = join(packageRoot, "node_modules", ".bin", executableName("pi"));
@@ -147,6 +166,7 @@ export async function runVerigenAgent(options: VerigenAgentLaunchOptions = {}): 
 	const child = spawn(launch.command, launch.args, {
 		stdio: "inherit",
 		env: process.env,
+		shell: process.platform === "win32" && /\.(?:cmd|bat)$/i.test(launch.command),
 	});
 	return await new Promise((resolvePromise, reject) => {
 		child.on("error", reject);

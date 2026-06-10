@@ -1,3 +1,8 @@
+---
+name: verigen-playbook
+description: Verilog/SystemVerilog RTL generation, verification, waveform trace debugging, and repair rules for VeriGen.
+---
+
 # VeriGen Playbook
 
 Use this skill when generating, verifying, or repairing Verilog/SystemVerilog RTL.
