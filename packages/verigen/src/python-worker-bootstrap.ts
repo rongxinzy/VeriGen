@@ -162,7 +162,6 @@ function resolveUvEnv(env?: Record<string, string>): Record<string, string> | un
 	const result: Record<string, string> = { ...env };
 	if (mirror === "tuna" || mirror === "tsinghua") {
 		result.UV_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple";
-		result.UV_PYTHON_INSTALL_MIRROR = "https://registry.npmmirror.com/-/binary/python-build-standalone";
 	} else if (mirror === "aliyun" || mirror === "ali") {
 		result.UV_INDEX_URL = "https://mirrors.aliyun.com/pypi/simple/";
 	} else if (mirror.startsWith("http://") || mirror.startsWith("https://")) {

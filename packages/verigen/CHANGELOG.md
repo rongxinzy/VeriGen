@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Python worker bootstrap to keep uv managed Python downloads on the official source instead of an incomplete npm mirror.
+
 ## [0.79.11] - 2026-06-10
 
 ### Fixed

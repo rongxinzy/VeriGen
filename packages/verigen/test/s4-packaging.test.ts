@@ -38,6 +38,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const args = process.argv.slice(2);
+if (process.env.UV_PYTHON_INSTALL_MIRROR) {
+  console.error("UV_PYTHON_INSTALL_MIRROR should not be set by default");
+  process.exit(2);
+}
 if (args[0] === "--version") {
   console.log("uv 0.0.0-test");
   process.exit(0);
