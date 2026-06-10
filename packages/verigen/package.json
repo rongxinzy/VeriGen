@@ -21,6 +21,8 @@
 	},
 	"files": [
 		"dist",
+		"install.ps1",
+		"install.sh",
 		"README.md",
 		"CHANGELOG.md"
 	],
@@ -35,6 +37,7 @@
 		"@earendil-works/pi-coding-agent": "0.79.0",
 		"@earendil-works/pi-tui": "0.79.0",
 		"graphology": "0.26.0",
+		"typebox": "1.1.38",
 		"vectra": "0.15.0",
 		"zod": "4.4.3"
 	},

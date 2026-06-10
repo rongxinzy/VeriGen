@@ -3,7 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
-import { defaultPlaybookRules, GraphifyContext, PlaybookRag, SpecAnchoredKnowledgeGraph } from "../src/index.ts";
+import {
+	defaultPlaybookRules,
+	executableName,
+	GraphifyContext,
+	PlaybookRag,
+	resolveGraphifyUpdateCommand,
+	SpecAnchoredKnowledgeGraph,
+} from "../src/index.ts";
 
 describe("SpecAnchoredKnowledgeGraph", () => {
 	test("retrieves a related subgraph and validates module port contracts", () => {
@@ -128,5 +135,17 @@ describe("GraphifyContext", () => {
 			path.nodes.map((node) => node.id),
 			["docs/PDD-VeriGen.md", ".pi/prompts/verigen-coder.md", "packages/verigen/src/spec-kg.ts"],
 		);
+	});
+
+	test("prefers bundled uvx for graphify updates", () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "verigen-graphify-uvx-"));
+		tempDirs.push(tempDir);
+		const packageRoot = join(tempDir, "package");
+		const toolDir = join(packageRoot, "dist", "native-tools", `${process.platform}-${process.arch}`);
+		mkdirSync(toolDir, { recursive: true });
+		const bundledUvx = join(toolDir, executableName("uvx"));
+		writeFileSync(bundledUvx, "");
+
+		assert.equal(resolveGraphifyUpdateCommand(packageRoot), bundledUvx);
 	});
 });

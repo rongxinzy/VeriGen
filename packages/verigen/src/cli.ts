@@ -66,6 +66,7 @@ Commands:
   agent            Launch the VeriGen chat-first coding agent
   mode             Print the VeriGen S5 mode/profile and pipeline stages
   doctor           Check Node, uv, iverilog/vvp, worker bootstrap, and Graphify status
+  python-bootstrap Prepare the Python worker venv with bundled uv
   worker-smoke     Bootstrap the worker and run one parse_ast JSONL request
   trace-demo       Run the built-in failing RTL/VCD example and print the S5 trace panel
   trace-panel      Trace user-provided RTL/VCD files and print the S5 trace panel
@@ -87,6 +88,7 @@ Commands:
 
 Options:
   --no-bootstrap   Do not create the Python worker cache venv
+  --force          Recreate the Python worker cache venv
   --json           Print machine-readable JSON
   --rtl PATH       RTL file for trace-panel
   --tb PATH        Testbench file for tool-runner sim
@@ -123,7 +125,7 @@ Options:
   --pack-install-plan Print npm pack/install smoke commands without running them
   --pack-destination PATH  Temporary directory for pack/install smoke tarball
   --install-prefix PATH    Temporary npm prefix for pack/install smoke
-  --cache-dir PATH   Temporary VERIGEN_CACHE_DIR for worker smoke
+  --cache-dir PATH   Temporary VERIGEN_CACHE_DIR for worker bootstrap/smoke
   --interactive    Launch product-preview as an interactive TUI
   --report         Print product report markdown instead of workbench preview
   --tui            Launch product workbench TUI on terminals, otherwise print layout preview
@@ -160,6 +162,7 @@ function positionalArgs(args: string[]): string[] {
 	const booleanFlags = new Set([
 		"--json",
 		"--no-bootstrap",
+		"--force",
 		"--help",
 		"--interactive",
 		"--live",
@@ -318,7 +321,11 @@ async function runMode(args: string[]): Promise<number> {
 }
 
 async function runDoctor(args: string[]): Promise<number> {
-	const result = await doctorVerigenInstall({ bootstrap: !hasFlag(args, "--no-bootstrap") });
+	const result = await doctorVerigenInstall({
+		bootstrap: !hasFlag(args, "--no-bootstrap"),
+		cacheRoot: optionValue(args, "--cache-dir"),
+		force: hasFlag(args, "--force"),
+	});
 	if (hasFlag(args, "--json")) {
 		console.log(JSON.stringify(result, null, 2));
 	} else {
@@ -327,8 +334,29 @@ async function runDoctor(args: string[]): Promise<number> {
 	return result.ok ? 0 : 1;
 }
 
+async function runPythonBootstrap(args: string[]): Promise<number> {
+	const launch = await bootstrapPythonWorker({
+		bootstrap: !hasFlag(args, "--no-bootstrap"),
+		cacheRoot: optionValue(args, "--cache-dir"),
+		force: hasFlag(args, "--force"),
+	});
+	if (hasFlag(args, "--json")) {
+		console.log(JSON.stringify({ ok: true, workerLaunch: launch }, null, 2));
+	} else {
+		console.log(`OK python-bootstrap: worker venv and dependencies ready at ${launch.venvDir}`);
+		console.log(`worker root: ${launch.workerRoot}`);
+		console.log(`python: ${launch.pythonPath}`);
+		console.log(`bootstrapped: ${launch.wasBootstrapped ? "yes" : "no"}`);
+	}
+	return 0;
+}
+
 async function runWorkerSmoke(args: string[]): Promise<number> {
-	const launch = await bootstrapPythonWorker({ bootstrap: !hasFlag(args, "--no-bootstrap") });
+	const launch = await bootstrapPythonWorker({
+		bootstrap: !hasFlag(args, "--no-bootstrap"),
+		cacheRoot: optionValue(args, "--cache-dir"),
+		force: hasFlag(args, "--force"),
+	});
 	const worker = new VerilogAnalysis({
 		command: launch.command,
 		args: launch.args,
@@ -930,6 +958,7 @@ async function main(args: string[]): Promise<number> {
 	if (command === "agent") return await runAgent(args.slice(1));
 	if (command === "mode") return await runMode(args.slice(1));
 	if (command === "doctor") return await runDoctor(args.slice(1));
+	if (command === "python-bootstrap") return await runPythonBootstrap(args.slice(1));
 	if (command === "worker-smoke") return await runWorkerSmoke(args.slice(1));
 	if (command === "trace-demo") return await runTraceDemo(args.slice(1));
 	if (command === "trace-panel") return await runTracePanel(args.slice(1));

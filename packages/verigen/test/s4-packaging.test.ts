@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { executableName, findBundledNativeTool } from "../src/native-tools.ts";
 import {
 	bootstrapPythonWorker,
 	findBundledPythonWorkerRoot,
+	findBundledUv,
 	pythonWorkerRootLooksValid,
 } from "../src/python-worker-bootstrap.ts";
 
@@ -41,7 +43,7 @@ if (args[0] === "--version") {
   process.exit(0);
 }
 if (args[0] === "venv") {
-  const venv = args[1];
+  const venv = args[args.length - 1];
   mkdirSync(join(venv, "bin"), { recursive: true });
   writeFileSync(join(venv, "bin", "python"), "#!/usr/bin/env node\\n");
   process.exit(0);
@@ -73,6 +75,8 @@ describe("S4 npm packaging surface", () => {
 		assert.equal(codingAgentExtensionExport.types, "./dist/verigen-coding-agent-extension.d.ts");
 		assert.ok(Array.isArray(parsed.files));
 		assert.ok(parsed.files.includes("dist"));
+		assert.ok(parsed.files.includes("install.ps1"));
+		assert.ok(parsed.files.includes("install.sh"));
 		assert.ok(parsed.files.includes("README.md"));
 		assert.ok(parsed.files.includes("CHANGELOG.md"));
 		assert.ok(isRecord(parsed.scripts));
@@ -85,12 +89,37 @@ describe("S4 npm packaging surface", () => {
 		assert.ok(isRecord(parsed.dependencies));
 		assert.equal(parsed.dependencies["@earendil-works/pi-coding-agent"], "0.79.0");
 		assert.equal(parsed.dependencies["@earendil-works/pi-tui"], "0.79.0");
+		assert.equal(parsed.dependencies.typebox, "1.1.38");
 
 		const copyScript = readFileSync(join(packageRoot, "scripts", "copy-python-worker.mjs"), "utf8");
 		assert.match(copyScript, /dist\/pi-assets/);
 		assert.match(copyScript, /\.pi\/prompts/);
 		assert.match(copyScript, /\.pi\/skills/);
 		assert.match(copyScript, /verigen-/);
+
+		const nativeToolsScript = readFileSync(join(packageRoot, "scripts", "install-native-tools.mjs"), "utf8");
+		assert.match(nativeToolsScript, /uvx/);
+
+		const installScript = readFileSync(join(packageRoot, "install.sh"), "utf8");
+		assert.match(installScript, /--ignore-scripts/);
+		assert.match(installScript, /--registry/);
+		assert.match(installScript, /registry\.npmmirror\.com/);
+		assert.match(installScript, /python-bootstrap --json/);
+		assert.match(installScript, /Python worker cache and dependencies/);
+		assert.match(installScript, /VERIGEN_SKIP_PYTHON_BOOTSTRAP/);
+
+		const installPowerShell = readFileSync(join(packageRoot, "install.ps1"), "utf8");
+		assert.match(installPowerShell, /--ignore-scripts/);
+		assert.match(installPowerShell, /--registry/);
+		assert.match(installPowerShell, /registry\.npmmirror\.com/);
+		assert.match(installPowerShell, /python-bootstrap --json/);
+		assert.match(installPowerShell, /Python worker cache and dependencies/);
+		assert.match(installPowerShell, /VERIGEN_SKIP_PYTHON_BOOTSTRAP/);
+		assert.match(installPowerShell, /choco install nodejs --version=/);
+		assert.match(installPowerShell, /24\.16\.0/);
+		assert.match(installPowerShell, /11\.13\.0/);
+		assert.match(installPowerShell, /Git Bash/);
+		assert.match(installPowerShell, /ExecutionPolicy Bypass/);
 	});
 });
 
@@ -123,6 +152,14 @@ describe("S4 Python worker bootstrap", () => {
 		assert.equal(firstLaunch.workerRoot, bundledWorker);
 		assert.equal(firstLaunch.wasBootstrapped, true);
 		assert.equal(firstLaunch.commands.length, 2);
+		assert.deepEqual(firstLaunch.commands[0]?.args, ["venv", "--python", "3.11", firstLaunch.venvDir]);
+		assert.deepEqual(firstLaunch.commands[1]?.args, [
+			"pip",
+			"install",
+			"--python",
+			firstLaunch.pythonPath,
+			bundledWorker,
+		]);
 		assert.match(firstLaunch.command, /python$/);
 		assert.deepEqual(firstLaunch.args, ["-m", "verilog_analysis"]);
 
@@ -133,5 +170,37 @@ describe("S4 Python worker bootstrap", () => {
 		});
 		assert.equal(secondLaunch.wasBootstrapped, false);
 		assert.equal(secondLaunch.command, firstLaunch.command);
+	});
+
+	test("resolves bundled uv and uvx with platform executable suffixes", () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "verigen-native-tools-"));
+		tempDirs.push(tempDir);
+		const packageDir = join(tempDir, "package");
+		const windowsToolDir = join(packageDir, "dist", "native-tools", "win32-x64");
+		mkdirSync(windowsToolDir, { recursive: true });
+		writeFileSync(join(windowsToolDir, "uv.exe"), "");
+		writeFileSync(join(windowsToolDir, "uvx.exe"), "");
+
+		assert.equal(executableName("uv", "win32"), "uv.exe");
+		assert.equal(
+			findBundledNativeTool(packageDir, "uv", { platform: "win32", arch: "x64" }),
+			join(windowsToolDir, "uv.exe"),
+		);
+		assert.equal(
+			findBundledNativeTool(packageDir, "uvx", { platform: "win32", arch: "x64" }),
+			join(windowsToolDir, "uvx.exe"),
+		);
+	});
+
+	test("prefers the bundled uv command for Python worker bootstrap", () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "verigen-bundled-uv-"));
+		tempDirs.push(tempDir);
+		const packageDir = join(tempDir, "package");
+		const nativeToolDir = join(packageDir, "dist", "native-tools", `${process.platform}-${process.arch}`);
+		mkdirSync(nativeToolDir, { recursive: true });
+		const bundledUv = join(nativeToolDir, executableName("uv"));
+		writeFileSync(bundledUv, "");
+
+		assert.equal(findBundledUv(packageDir), bundledUv);
 	});
 });

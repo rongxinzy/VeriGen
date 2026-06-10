@@ -35,7 +35,16 @@ export {
 	type GraphifyQueryResult,
 	type GraphifyStatus,
 	type GraphifyUpdateResult,
+	resolveGraphifyUpdateCommand,
 } from "./graphify-context.ts";
+export {
+	currentVerigenPackageRoot,
+	executableName,
+	findBundledNativeTool,
+	findBundledNativeToolDir,
+	type NativeToolLookupOptions,
+	nativeToolTargetId,
+} from "./native-tools.ts";
 export {
 	defaultPlaybookIndexPath,
 	defaultPlaybookRules,
@@ -55,6 +64,7 @@ export {
 	type DoctorCheckState,
 	doctorVerigenInstall,
 	findBundledPythonWorkerRoot,
+	findBundledUv,
 	type PythonWorkerBootstrapOptions,
 	type PythonWorkerLaunch,
 	pythonWorkerRootLooksValid,
@@ -307,7 +317,6 @@ export type {
 export {
 	buildVerigenAgentEnv,
 	buildVerigenAgentLaunch,
-	findBundledNativeToolDir,
 	findVerigenAgentAssets,
 	runVerigenAgent,
 	type VerigenAgentAssets,

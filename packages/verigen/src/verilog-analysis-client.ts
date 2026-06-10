@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createInterface, type Interface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { bootstrapPythonWorker } from "./python-worker-bootstrap.ts";
+import { bootstrapPythonWorker, findBundledUv } from "./python-worker-bootstrap.ts";
 import type {
 	BuildControlflowArgs,
 	BuildControlflowResult,
@@ -290,8 +290,9 @@ export class VerilogAnalysis {
 		if (this.options.command || this.options.args || this.options.workerCwd) {
 			const cwd = this.options.workerCwd ?? defaultWorkerCwd();
 			const directWorkerLaunch = this.options.command ? undefined : workerVenvLaunch(cwd);
+			const bundledUv = findBundledUv(this.options.packageRoot);
 			return {
-				command: this.options.command ?? directWorkerLaunch?.command ?? "uv",
+				command: this.options.command ?? directWorkerLaunch?.command ?? bundledUv ?? "uv",
 				args: this.options.args ?? directWorkerLaunch?.args ?? ["run", "verigen-verilog-analysis"],
 				cwd,
 			};

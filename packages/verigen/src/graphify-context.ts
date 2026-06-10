@@ -1,12 +1,15 @@
 import { spawn } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { currentVerigenPackageRoot, executableName, findBundledNativeTool } from "./native-tools.ts";
 
 export interface GraphifyContextOptions {
 	repoRoot: string;
 	graphPath?: string;
 	staleAfterMs?: number;
 	maxResults?: number;
+	packageRoot?: string;
+	uvxCommand?: string;
 }
 
 export interface GraphifyStatus {
@@ -70,6 +73,19 @@ export interface GraphifyUpdateResult {
 interface GraphifyGraph {
 	nodes: GraphifyNode[];
 	edges: GraphifyEdge[];
+}
+
+interface ResolvedGraphifyContextOptions {
+	repoRoot: string;
+	graphPath: string;
+	staleAfterMs: number;
+	maxResults: number;
+	packageRoot: string;
+	uvxCommand?: string;
+}
+
+export function resolveGraphifyUpdateCommand(packageRoot: string, uvxCommand?: string): string {
+	return uvxCommand ?? findBundledNativeTool(packageRoot, "uvx") ?? executableName("uvx");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -166,7 +182,7 @@ function findNode(nodes: GraphifyNode[], idOrPath: string): GraphifyNode | undef
 }
 
 export class GraphifyContext {
-	private options: Required<GraphifyContextOptions>;
+	private options: ResolvedGraphifyContextOptions;
 
 	constructor(options: GraphifyContextOptions) {
 		this.options = {
@@ -174,6 +190,8 @@ export class GraphifyContext {
 			graphPath: options.graphPath ?? join(options.repoRoot, "graphify-out", "graph.json"),
 			staleAfterMs: options.staleAfterMs ?? 24 * 60 * 60 * 1000,
 			maxResults: options.maxResults ?? 8,
+			packageRoot: options.packageRoot ? resolve(options.packageRoot) : currentVerigenPackageRoot(),
+			...(options.uvxCommand ? { uvxCommand: options.uvxCommand } : {}),
 		};
 	}
 
@@ -268,7 +286,7 @@ export class GraphifyContext {
 	}
 
 	async update(target = this.options.repoRoot): Promise<GraphifyUpdateResult> {
-		const command = "uvx";
+		const command = resolveGraphifyUpdateCommand(this.options.packageRoot, this.options.uvxCommand);
 		const args = ["--from", "graphifyy", "graphify", "update", target, "--no-cluster"];
 		return await new Promise((resolvePromise) => {
 			const child = spawn(command, args, {

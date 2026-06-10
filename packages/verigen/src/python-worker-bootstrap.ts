@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GraphifyContext } from "./graphify-context.ts";
+import { executableName, findBundledNativeTool } from "./native-tools.ts";
 
 export interface PythonWorkerBootstrapOptions {
 	packageRoot?: string;
@@ -93,10 +94,6 @@ function hashPath(path: string): string {
 	return createHash("sha256").update(realPath).digest("hex").slice(0, 12);
 }
 
-function executableName(name: string): string {
-	return process.platform === "win32" ? `${name}.exe` : name;
-}
-
 function binDir(venvDir: string): string {
 	return process.platform === "win32" ? join(venvDir, "Scripts") : join(venvDir, "bin");
 }
@@ -153,6 +150,25 @@ export function findBundledPythonWorkerRoot(packageRoot = currentPackageRoot()):
 		if (pythonWorkerRootLooksValid(candidate)) return candidate;
 	}
 	return candidates[0];
+}
+
+export function findBundledUv(packageRoot = currentPackageRoot()): string | undefined {
+	return findBundledNativeTool(packageRoot, "uv");
+}
+
+function resolveUvEnv(env?: Record<string, string>): Record<string, string> | undefined {
+	const mirror = (env?.VERIGEN_UV_MIRROR ?? process.env.VERIGEN_UV_MIRROR)?.trim() ?? "tuna";
+	if (mirror === "off" || mirror === "0" || mirror === "false" || mirror === "") return env;
+	const result: Record<string, string> = { ...env };
+	if (mirror === "tuna" || mirror === "tsinghua") {
+		result.UV_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple";
+		result.UV_PYTHON_INSTALL_MIRROR = "https://registry.npmmirror.com/-/binary/python-build-standalone";
+	} else if (mirror === "aliyun" || mirror === "ali") {
+		result.UV_INDEX_URL = "https://mirrors.aliyun.com/pypi/simple/";
+	} else if (mirror.startsWith("http://") || mirror.startsWith("https://")) {
+		result.UV_INDEX_URL = mirror;
+	}
+	return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function runCommand(
@@ -212,7 +228,8 @@ export async function bootstrapPythonWorker(options: PythonWorkerBootstrapOption
 	const cacheRoot = options.cacheRoot ? resolve(options.cacheRoot) : defaultCacheRoot();
 	const packageVersion = currentPackageVersion(packageRoot);
 	const paths = venvPaths(cacheRoot, packageVersion, workerRoot);
-	const command = options.uvCommand ?? "uv";
+	const command = options.uvCommand ?? findBundledUv(packageRoot) ?? "uv";
+	const bootstrapEnv = resolveUvEnv(options.env);
 	const commands: CommandResult[] = [];
 	if (!options.force && pathLooksExecutable(paths.pythonPath) && pathLooksExecutable(paths.workerCommand)) {
 		return {
@@ -231,13 +248,13 @@ export async function bootstrapPythonWorker(options: PythonWorkerBootstrapOption
 		throw new Error(`VeriGen Python worker venv is missing at ${paths.venvDir}; run verigen doctor to bootstrap it`);
 	}
 
-	const venv = await runCommand(command, ["venv", paths.venvDir], { env: options.env });
+	const venv = await runCommand(command, ["venv", "--python", "3.11", paths.venvDir], { env: bootstrapEnv });
 	commands.push(venv);
 	if (!venv.ok) {
 		throw new Error(`Failed to create VeriGen Python worker venv with ${command}: ${venv.stderr || venv.stdout}`);
 	}
 	const install = await runCommand(command, ["pip", "install", "--python", paths.pythonPath, workerRoot], {
-		env: options.env,
+		env: bootstrapEnv,
 	});
 	commands.push(install);
 	if (!install.ok) {
@@ -316,7 +333,7 @@ export async function doctorVerigenInstall(
 		required: true,
 	});
 
-	const uvCommand = options.uvCommand ?? "uv";
+	const uvCommand = options.uvCommand ?? findBundledUv(packageRoot) ?? "uv";
 	const uv = await commandProbe(uvCommand, ["--version"]);
 	checks.push(commandCheck("uv", uv, true));
 	const iverilog = await commandProbe("iverilog", ["-V"]);

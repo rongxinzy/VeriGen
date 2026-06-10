@@ -228,15 +228,10 @@ describe("S5 VeriGen agent launcher", () => {
 		assert.ok(launch.args.includes(join(skillDir, "verigen-playbook.md")));
 		assert.ok(launch.args.includes("--extension"));
 		assert.ok(launch.args.includes(join(tempDir, "dist", "verigen-coding-agent-extension.js")));
-		assert.deepEqual(launch.args.slice(-4), [
-			"--model",
-			"verigen-kimi/kimi-for-coding",
-			"--print",
-			"generate a counter",
-		]);
+		assert.deepEqual(launch.args.slice(-2), ["--print", "generate a counter"]);
 	});
 
-	test("lets explicit model selection override the default VeriGen Kimi model", () => {
+	test("lets explicit model selection pass through to pi", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "verigen-s5-agent-model-"));
 		tempDirs.push(tempDir);
 		const promptDir = join(tempDir, "dist", "pi-assets", "prompts");
@@ -257,7 +252,7 @@ describe("S5 VeriGen agent launcher", () => {
 		assert.deepEqual(launch.args.slice(-2), ["--model", "openai/gpt-5.4"]);
 	});
 
-	test("does not inject the default VeriGen Kimi model when extensions are disabled", () => {
+	test("does not inject a default model when extensions are disabled", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "verigen-s5-agent-no-ext-"));
 		tempDirs.push(tempDir);
 		const promptDir = join(tempDir, "dist", "pi-assets", "prompts");
@@ -356,5 +351,22 @@ describe("S5 VeriGen agent launcher", () => {
 		assert.equal(result.status, 0);
 		assert.match(result.stdout.trim(), /^\d+\.\d+\.\d+$/);
 		assert.notEqual(result.stdout.trim(), "0.79.0");
+	});
+
+	test("exposes a no-network Python bootstrap command for install-time prewarm", () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "verigen-python-bootstrap-"));
+		tempDirs.push(tempDir);
+		const cliPath = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+		const result = spawnSync(
+			process.execPath,
+			["--import", "tsx", cliPath, "python-bootstrap", "--no-bootstrap", "--cache-dir", tempDir, "--json"],
+			{
+				cwd: process.cwd(),
+				encoding: "utf8",
+			},
+		);
+
+		assert.equal(result.status, 1);
+		assert.match(result.stderr, /worker venv is missing/);
 	});
 });

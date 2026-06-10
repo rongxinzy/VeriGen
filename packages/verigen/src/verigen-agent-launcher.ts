@@ -5,8 +5,6 @@ import { basename, delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const requireFromHere = createRequire(import.meta.url);
-const defaultAgentProvider = "verigen-kimi";
-const defaultAgentModel = "kimi-for-coding";
 const verigenLatestUrl = "https://registry.npmjs.org/verigen/latest";
 const versionCheckTimeoutMs = 5_000;
 
@@ -170,19 +168,6 @@ function resolvePiLauncher(packageRoot: string, piCommand?: string): { command: 
 	return { command: executableName("pi"), args: [] };
 }
 
-function hasModelSelection(args: string[]): boolean {
-	return args.includes("--model") || args.includes("--provider") || args.includes("--models");
-}
-
-function shouldInjectDefaultModel(args: string[], assets: VerigenAgentAssets): boolean {
-	return assets.extensions.length > 0 && !args.includes("--no-extensions") && !hasModelSelection(args);
-}
-
-function defaultModelArgs(env: NodeJS.ProcessEnv = process.env): string[] {
-	const model = env.VERIGEN_TEST_LLM_MODEL?.trim() || defaultAgentModel;
-	return ["--model", `${defaultAgentProvider}/${model}`];
-}
-
 function pathEnvKey(env: NodeJS.ProcessEnv): string {
 	if (process.platform !== "win32") return "PATH";
 	const existingKey = Object.keys(env).find((key) => key.toLowerCase() === "path");
@@ -221,7 +206,6 @@ export function buildVerigenAgentLaunch(options: VerigenAgentLaunchOptions = {})
 		...assets.promptTemplates.flatMap((promptPath) => ["--prompt-template", promptPath]),
 		...assets.skills.flatMap((skillPath) => ["--skill", skillPath]),
 		...assets.extensions.flatMap((extensionPath) => ["--extension", extensionPath]),
-		...(shouldInjectDefaultModel(piArgs, assets) ? defaultModelArgs() : []),
 		...piArgs,
 	];
 	return {

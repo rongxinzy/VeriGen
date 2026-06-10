@@ -42,6 +42,14 @@ const targets = [
 				binary: "rg.exe",
 				license: "MIT OR Unlicense",
 			},
+			{
+				name: "uv",
+				version: "0.8.4",
+				repo: "astral-sh/uv",
+				asset: "uv-x86_64-pc-windows-msvc.zip",
+				binaries: ["uv.exe", "uvx.exe"],
+				license: "MIT OR Apache-2.0",
+			},
 		],
 	},
 	{
@@ -62,6 +70,14 @@ const targets = [
 				asset: "ripgrep-15.1.0-aarch64-pc-windows-msvc.zip",
 				binary: "rg.exe",
 				license: "MIT OR Unlicense",
+			},
+			{
+				name: "uv",
+				version: "0.8.4",
+				repo: "astral-sh/uv",
+				asset: "uv-aarch64-pc-windows-msvc.zip",
+				binaries: ["uv.exe", "uvx.exe"],
+				license: "MIT OR Apache-2.0",
 			},
 		],
 	},
@@ -84,6 +100,14 @@ const targets = [
 				binary: "rg",
 				license: "MIT OR Unlicense",
 			},
+			{
+				name: "uv",
+				version: "0.8.4",
+				repo: "astral-sh/uv",
+				asset: "uv-aarch64-apple-darwin.tar.gz",
+				binaries: ["uv", "uvx"],
+				license: "MIT OR Apache-2.0",
+			},
 		],
 	},
 	{
@@ -104,6 +128,14 @@ const targets = [
 				asset: "ripgrep-15.1.0-x86_64-apple-darwin.tar.gz",
 				binary: "rg",
 				license: "MIT OR Unlicense",
+			},
+			{
+				name: "uv",
+				version: "0.8.4",
+				repo: "astral-sh/uv",
+				asset: "uv-x86_64-apple-darwin.tar.gz",
+				binaries: ["uv", "uvx"],
+				license: "MIT OR Apache-2.0",
 			},
 		],
 	},
@@ -126,6 +158,14 @@ const targets = [
 				binary: "rg",
 				license: "MIT OR Unlicense",
 			},
+			{
+				name: "uv",
+				version: "0.8.4",
+				repo: "astral-sh/uv",
+				asset: "uv-x86_64-unknown-linux-gnu.tar.gz",
+				binaries: ["uv", "uvx"],
+				license: "MIT OR Apache-2.0",
+			},
 		],
 	},
 	{
@@ -147,13 +187,23 @@ const targets = [
 				binary: "rg",
 				license: "MIT OR Unlicense",
 			},
+			{
+				name: "uv",
+				version: "0.8.4",
+				repo: "astral-sh/uv",
+				asset: "uv-aarch64-unknown-linux-gnu.tar.gz",
+				binaries: ["uv", "uvx"],
+				license: "MIT OR Apache-2.0",
+			},
 		],
 	},
 ];
 
 function releaseUrl(tool) {
-	const tag = tool.name === "rg" ? tool.version : `v${tool.version}`;
-	return `https://github.com/${tool.repo}/releases/download/${tag}/${tool.asset}`;
+	if (tool.name === "rg" || tool.name === "uv") {
+		return `https://github.com/${tool.repo}/releases/download/${tool.version}/${tool.asset}`;
+	}
+	return `https://github.com/${tool.repo}/releases/download/v${tool.version}/${tool.asset}`;
 }
 
 async function download(url, destination) {
@@ -192,6 +242,10 @@ function findBinary(root, binary) {
 	return undefined;
 }
 
+function toolBinaries(tool) {
+	return tool.binaries ?? [tool.binary];
+}
+
 function extract(archive, destination) {
 	mkdirSync(destination, { recursive: true });
 	if (archive.endsWith(".zip")) {
@@ -214,21 +268,23 @@ for (const target of targets) {
 	mkdirSync(targetDir, { recursive: true });
 	const notices = [];
 	for (const tool of target.tools) {
-		const archive = join(cacheRoot, tool.asset);
+		const archive = join(cacheRoot, `${tool.version}-${tool.asset}`);
 		if (!existsSync(archive) || statSync(archive).size === 0) {
 			await download(releaseUrl(tool), archive);
 		}
 		const extractDir = join(cacheRoot, `${target.id}-${tool.name}-extract`);
 		rmSync(extractDir, { recursive: true, force: true });
 		extract(archive, extractDir);
-		const binary = findBinary(extractDir, tool.binary);
-		if (!binary) {
-			throw new Error(`Could not find ${tool.binary} in ${basename(archive)}`);
-		}
-		const output = join(targetDir, tool.binary);
-		await copyFile(binary, output);
-		if (!tool.binary.endsWith(".exe")) {
-			await chmod(output, 0o755);
+		for (const binaryName of toolBinaries(tool)) {
+			const binary = findBinary(extractDir, binaryName);
+			if (!binary) {
+				throw new Error(`Could not find ${binaryName} in ${basename(archive)}`);
+			}
+			const output = join(targetDir, binaryName);
+			await copyFile(binary, output);
+			if (!binaryName.endsWith(".exe")) {
+				await chmod(output, 0o755);
+			}
 		}
 		const archiveSha256 = hashFile(archive);
 		notices.push(`${tool.name} ${tool.version} (${tool.repo}) asset=${tool.asset} sha256=${archiveSha256} license=${tool.license}`);

@@ -17,8 +17,18 @@
 
 发布到 npm 后：
 
+Windows PowerShell 一键安装：
+
+```powershell
+irm https://raw.githubusercontent.com/rongxinzy/VeriGen/main/packages/verigen/install.ps1 | iex
+```
+
+该脚本会检测 Node.js/npm 版本、提示安装 Git Bash、通过 `https://registry.npmmirror.com` 安装 npm 包，并提前用包内 bundled `uv` 创建 Python worker venv 和依赖。若 Node.js/npm 缺失或版本不满足，脚本会输出 Chocolatey + Node.js `24.16.0` 安装命令。
+
+通用 npm 安装：
+
 ```bash
-npm install -g verigen
+npm install -g verigen@latest
 ```
 
 本地预览 tarball：
@@ -35,11 +45,10 @@ npm install -g --prefix /tmp/verigen-preview /tmp/verigen-pack/verigen-0.79.2.tg
 必须在 `PATH` 中可用：
 
 - Node.js `>=22.19.0`
-- `uv`
 - `iverilog`
 - `vvp`
 
-Python worker 会在首次运行时由 `uv` 自动创建 cache venv。npm 包内自带 worker 源码和魔改 `pyverilog` fork；`ply`、`jinja2`、`networkx`、`numpy`、`pandas`、`vcdvcd` 等第三方 Python 依赖从 PyPI 安装。
+npm 包内自带 `uv`/`uvx` 和 Python worker 源码，PATH 中的 `uv` 只作为 fallback。Python worker 会在安装脚本预热阶段或首次运行时由 bundled `uv` 自动创建 cache venv。npm 包内自带 worker 源码和魔改 `pyverilog` fork；`ply`、`jinja2`、`networkx`、`numpy`、`pandas`、`vcdvcd` 等第三方 Python 依赖从 PyPI 安装。
 
 不需要 Docker，也不会发布 VeriGen 自己的 Python worker 到 PyPI。
 
