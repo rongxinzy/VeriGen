@@ -38,6 +38,7 @@ out.jsonl
 pi-*.html
 out.html
 packages/coding-agent/binaries/
+packages/verigen/binaries/
 packages/verilog-analysis/requirements.lock.txt
 packages/verilog-analysis/wheelhouse/
 todo.md
