@@ -104,6 +104,26 @@ S5 新增的是可被后续正式 TUI 消费的垂直入口：
 - `verigen tui-preview`：把 trace panel 或 Quality Probe 结果渲染成 S5 TUI 预览快照。
 - `verigen quality-probe`：列出或运行 L0/L1 Codegen Quality Probe 小题。
 
+## 模型配置
+
+默认交互式 TUI 会注册 `verigen-kimi/kimi-for-coding`，接口格式为 Anthropic-compatible。
+
+首次启动后可在 TUI 内运行：
+
+```text
+/login
+```
+
+然后选择 `Use an API key`，再选择 `VeriGen Kimi`，粘贴 API key。也可以在启动前设置：
+
+```bash
+VERIGEN_TEST_LLM_BASE_URL=http://172.18.5.179:3000
+VERIGEN_TEST_LLM_MODEL=kimi-for-coding
+VERIGEN_TEST_LLM_API_KEY=<local-secret>
+```
+
+TUI 内可运行 `/verigen-models` 查看当前默认 endpoint、模型名和配置步骤。
+
 ## S6 EDA ToolRunner
 
 S6 已新增统一 EDA ToolRunner：

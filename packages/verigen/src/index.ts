@@ -305,7 +305,9 @@ export type {
 	WorkerFunctionName,
 } from "./types.ts";
 export {
+	buildVerigenAgentEnv,
 	buildVerigenAgentLaunch,
+	findBundledNativeToolDir,
 	findVerigenAgentAssets,
 	runVerigenAgent,
 	type VerigenAgentAssets,
@@ -317,6 +319,9 @@ export {
 	createVerigenCodingAgentExtension,
 	default as verigenCodingAgentExtension,
 	installVerigenCodingAgentExtension,
+	VERIGEN_DEFAULT_BASE_URL,
+	VERIGEN_DEFAULT_MODEL_ID,
+	VERIGEN_KIMI_PROVIDER_ID,
 	VERIGEN_WORKBENCH_CUSTOM_TYPE,
 	type VerigenCodingAgentExtensionOptions,
 	type VerigenWorkbenchExtensionApi,

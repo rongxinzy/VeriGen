@@ -3,6 +3,7 @@ import type {
 	ExtensionContext,
 	ExtensionFactory,
 	MessageRenderer,
+	ProviderConfig,
 	Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
@@ -14,6 +15,9 @@ import {
 } from "./s15-product-workbench.ts";
 
 export const VERIGEN_WORKBENCH_CUSTOM_TYPE = "verigen.product-workbench";
+export const VERIGEN_KIMI_PROVIDER_ID = "verigen-kimi";
+export const VERIGEN_DEFAULT_MODEL_ID = "kimi-for-coding";
+export const VERIGEN_DEFAULT_BASE_URL = "http://172.18.5.179:3000";
 
 export interface VerigenCodingAgentExtensionOptions {
 	autoMount?: boolean;
@@ -38,6 +42,7 @@ export interface VerigenWorkbenchExtensionApi {
 	): void;
 	registerCommand(name: string, options: VerigenWorkbenchExtensionCommand): void;
 	registerMessageRenderer<T = unknown>(customType: string, renderer: MessageRenderer<T>): void;
+	registerProvider(name: string, config: ProviderConfig): void;
 	sendMessage<T = unknown>(
 		message: {
 			customType: string;
@@ -59,6 +64,28 @@ function extensionOptions(options: VerigenCodingAgentExtensionOptions): Required
 		statusKey: options.statusKey ?? "verigen",
 		widgetKey: options.widgetKey ?? "verigen-product-workbench",
 		widgetPlacement: options.widgetPlacement ?? "belowEditor",
+	};
+}
+
+function verigenProviderConfig(env: NodeJS.ProcessEnv = process.env): ProviderConfig {
+	const modelId = env.VERIGEN_TEST_LLM_MODEL?.trim() || VERIGEN_DEFAULT_MODEL_ID;
+	const baseUrl = env.VERIGEN_TEST_LLM_BASE_URL?.trim() || VERIGEN_DEFAULT_BASE_URL;
+	return {
+		name: "VeriGen Kimi",
+		baseUrl,
+		apiKey: "$VERIGEN_TEST_LLM_API_KEY",
+		api: "anthropic-messages",
+		models: [
+			{
+				id: modelId,
+				name: modelId,
+				reasoning: false,
+				input: ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 128_000,
+				maxTokens: 16_384,
+			},
+		],
 	};
 }
 
@@ -160,11 +187,25 @@ function commandUsage(ctx: ExtensionCommandContext): void {
 	ctx.ui.notify("Usage: /verigen-workbench show|hide|toggle|snapshot", "info");
 }
 
+function modelSetupGuide(env: NodeJS.ProcessEnv = process.env): string {
+	const modelId = env.VERIGEN_TEST_LLM_MODEL?.trim() || VERIGEN_DEFAULT_MODEL_ID;
+	const baseUrl = env.VERIGEN_TEST_LLM_BASE_URL?.trim() || VERIGEN_DEFAULT_BASE_URL;
+	return [
+		"VeriGen model setup",
+		`Default model: ${VERIGEN_KIMI_PROVIDER_ID}/${modelId}`,
+		`Endpoint: ${baseUrl}`,
+		"Interactive setup: run /login, choose Use an API key, select VeriGen Kimi, then paste the API key.",
+		"Environment setup: set VERIGEN_TEST_LLM_API_KEY before starting verigen.",
+		"Optional overrides: VERIGEN_TEST_LLM_BASE_URL and VERIGEN_TEST_LLM_MODEL.",
+	].join("\n");
+}
+
 export function installVerigenCodingAgentExtension(
 	pi: VerigenWorkbenchExtensionApi,
 	options: VerigenCodingAgentExtensionOptions = {},
 ): void {
 	let visible = extensionOptions(options).autoMount;
+	pi.registerProvider(VERIGEN_KIMI_PROVIDER_ID, verigenProviderConfig(extensionOptions(options).env));
 
 	pi.registerMessageRenderer<ProductWorkbenchModel>(VERIGEN_WORKBENCH_CUSTOM_TYPE, (message) => {
 		const model = isProductWorkbenchModel(message.details) ? message.details : productWorkbenchModel(options);
@@ -177,6 +218,9 @@ export function installVerigenCodingAgentExtension(
 				render: (width: number) => renderVerigenStartupHeader(theme, width),
 				invalidate: () => {},
 			}));
+		}
+		if (ctx.mode === "tui" && ctx.modelRegistry.getAvailable().length === 0) {
+			ctx.ui.notify(modelSetupGuide(extensionOptions(options).env), "warning");
 		}
 		if (!visible) return;
 		mountWorkbench(ctx, options);
@@ -225,6 +269,13 @@ export function installVerigenCodingAgentExtension(
 				return;
 			}
 			commandUsage(ctx);
+		},
+	});
+
+	pi.registerCommand("verigen-models", {
+		description: "Show VeriGen model setup guidance",
+		handler: async (_args, ctx) => {
+			ctx.ui.notify(modelSetupGuide(extensionOptions(options).env), "info");
 		},
 	});
 }

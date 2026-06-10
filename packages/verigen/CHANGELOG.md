@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added bundled native `fd` and `ripgrep` packaging for common Windows, macOS, and Linux targets so fresh installs do not download them on first TUI startup.
+- Added a default `verigen-kimi/kimi-for-coding` Anthropic-compatible provider registration and `/verigen-models` setup guidance for the chat-first TUI.
+
+### Changed
+
+- Changed the chat-first agent launcher to disable inherited pi startup update/download checks, prepend bundled native tools to PATH, and check `verigen` updates instead of pi updates.
+
 ## [0.79.5] - 2026-06-10
 
 ### Added

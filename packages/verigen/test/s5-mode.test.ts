@@ -1,10 +1,12 @@
 import assert from "node:assert";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import {
 	buildCodegenQualityProbePrompt,
+	buildVerigenAgentEnv,
 	buildVerigenAgentLaunch,
 	createQualityProbeTuiPreview,
 	createTraceTextPanel,
@@ -225,7 +227,67 @@ describe("S5 VeriGen agent launcher", () => {
 		assert.ok(launch.args.includes(join(skillDir, "verigen-playbook.md")));
 		assert.ok(launch.args.includes("--extension"));
 		assert.ok(launch.args.includes(join(tempDir, "dist", "verigen-coding-agent-extension.js")));
-		assert.deepEqual(launch.args.slice(-2), ["--print", "generate a counter"]);
+		assert.deepEqual(launch.args.slice(-4), [
+			"--model",
+			"verigen-kimi/kimi-for-coding",
+			"--print",
+			"generate a counter",
+		]);
+	});
+
+	test("lets explicit model selection override the default VeriGen Kimi model", () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "verigen-s5-agent-model-"));
+		tempDirs.push(tempDir);
+		const promptDir = join(tempDir, "dist", "pi-assets", "prompts");
+		const skillDir = join(tempDir, "dist", "pi-assets", "skills");
+		mkdirSync(promptDir, { recursive: true });
+		mkdirSync(skillDir, { recursive: true });
+		writeFileSync(join(promptDir, "verigen-system.md"), "# system\n");
+		writeFileSync(join(skillDir, "verigen-playbook.md"), "# playbook\n");
+		writeFileSync(join(tempDir, "dist", "verigen-coding-agent-extension.js"), "export {};\n");
+
+		const launch = buildVerigenAgentLaunch({
+			packageRoot: tempDir,
+			piCommand: "pi-test",
+			piArgs: ["--model", "openai/gpt-5.4"],
+		});
+
+		assert.equal(launch.args.filter((arg) => arg === "--model").length, 1);
+		assert.deepEqual(launch.args.slice(-2), ["--model", "openai/gpt-5.4"]);
+	});
+
+	test("does not inject the default VeriGen Kimi model when extensions are disabled", () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "verigen-s5-agent-no-ext-"));
+		tempDirs.push(tempDir);
+		const promptDir = join(tempDir, "dist", "pi-assets", "prompts");
+		const skillDir = join(tempDir, "dist", "pi-assets", "skills");
+		mkdirSync(promptDir, { recursive: true });
+		mkdirSync(skillDir, { recursive: true });
+		writeFileSync(join(promptDir, "verigen-system.md"), "# system\n");
+		writeFileSync(join(skillDir, "verigen-playbook.md"), "# playbook\n");
+		writeFileSync(join(tempDir, "dist", "verigen-coding-agent-extension.js"), "export {};\n");
+
+		const launch = buildVerigenAgentLaunch({
+			packageRoot: tempDir,
+			piCommand: "pi-test",
+			piArgs: ["--no-extensions"],
+		});
+
+		assert.ok(!launch.args.includes("--model"));
+		assert.deepEqual(launch.args.slice(-1), ["--no-extensions"]);
+	});
+
+	test("builds a child environment that disables pi startup downloads and prepends bundled native tools", () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "verigen-s5-agent-env-"));
+		tempDirs.push(tempDir);
+		const toolDir = join(tempDir, "dist", "native-tools", `${process.platform}-${process.arch}`);
+		mkdirSync(toolDir, { recursive: true });
+
+		const env = buildVerigenAgentEnv(tempDir, { PATH: "/usr/bin" });
+
+		assert.equal(env.PI_SKIP_VERSION_CHECK, "1");
+		assert.equal(env.PI_OFFLINE, "1");
+		assert.equal(env.PATH, `${toolDir}${delimiter}/usr/bin`);
 	});
 
 	test("uses the source checkout pi-test launcher so workspace path aliases resolve", () => {
@@ -281,5 +343,16 @@ describe("S5 VeriGen agent launcher", () => {
 		assert.equal(launch.args[0], dependencyCli);
 		assert.ok(launch.args.includes("--system-prompt"));
 		assert.ok(launch.args.includes("--extension"));
+	});
+
+	test("prints the VeriGen package version instead of forwarding --version to pi", () => {
+		const result = spawnSync(process.execPath, ["--import", "tsx", "packages/verigen/src/cli.ts", "--version"], {
+			cwd: process.cwd(),
+			encoding: "utf8",
+		});
+
+		assert.equal(result.status, 0);
+		assert.match(result.stdout.trim(), /^\d+\.\d+\.\d+$/);
+		assert.notEqual(result.stdout.trim(), "0.79.0");
 	});
 });

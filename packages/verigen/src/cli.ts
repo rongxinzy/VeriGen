@@ -53,7 +53,7 @@ import {
 	type WorkbenchInteractionAction,
 	type WorkbenchLayoutPatch,
 } from "./s15-product-workbench.ts";
-import { buildVerigenAgentLaunch, runVerigenAgent } from "./verigen-agent-launcher.ts";
+import { buildVerigenAgentLaunch, readVerigenPackageVersion, runVerigenAgent } from "./verigen-agent-launcher.ts";
 import { VerilogAnalysis } from "./verilog-analysis-client.ts";
 
 function printHelp(): void {
@@ -133,6 +133,10 @@ Options:
   --max-depth N    Limit Graphify path search depth
   --help           Show this help
 `);
+}
+
+function printVersion(): void {
+	console.log(readVerigenPackageVersion() ?? "unknown");
 }
 
 function hasFlag(args: string[], flag: string): boolean {
@@ -912,6 +916,10 @@ async function runDefault(): Promise<number> {
 }
 
 async function main(args: string[]): Promise<number> {
+	if (args[0] === "--version" || args[0] === "-v") {
+		printVersion();
+		return 0;
+	}
 	if (args[0] === "--help" || args[0] === "-h" || hasFlag(args, "--help")) {
 		printHelp();
 		return 0;

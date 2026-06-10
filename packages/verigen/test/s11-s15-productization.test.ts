@@ -30,6 +30,8 @@ import {
 	runEvaluationSuite,
 	serializeWorkbenchLayout,
 	splitProductWorkbenchInput,
+	VERIGEN_DEFAULT_MODEL_ID,
+	VERIGEN_KIMI_PROVIDER_ID,
 	VERIGEN_WORKBENCH_CUSTOM_TYPE,
 	type VerigenWorkbenchExtensionApi,
 	type VerigenWorkbenchExtensionCommand,
@@ -436,24 +438,30 @@ describe("S11-S15 productization layer", () => {
 	test("registers a coding-agent extension that mounts the workbench widget on command", async () => {
 		type WorkbenchHandler = Parameters<VerigenWorkbenchExtensionApi["on"]>[1];
 		const handlers = new Map<string, WorkbenchHandler>();
-		let command: VerigenWorkbenchExtensionCommand | undefined;
+		const commands = new Map<string, VerigenWorkbenchExtensionCommand>();
 		let rendererType: string | undefined;
+		let providerName: string | undefined;
+		let providerModel: string | undefined;
 		let renderedHeader = "";
 		let widgetKey: string | undefined;
 		let widgetPlacement: string | undefined;
 		let renderedWidget = "";
 		let statusText: string | undefined;
 		let sentCustomType: string | undefined;
+		let notification = "";
 		const api: VerigenWorkbenchExtensionApi = {
 			on: (event, handler) => {
 				handlers.set(event, handler);
 			},
 			registerCommand: (name, registeredCommand) => {
-				assert.equal(name, "verigen-workbench");
-				command = registeredCommand;
+				commands.set(name, registeredCommand);
 			},
 			registerMessageRenderer: (customType) => {
 				rendererType = customType;
+			},
+			registerProvider: (name, config) => {
+				providerName = name;
+				providerModel = config.models?.[0]?.id;
 			},
 			sendMessage: (message) => {
 				sentCustomType = message.customType;
@@ -482,7 +490,12 @@ describe("S11-S15 productization layer", () => {
 					)({}, { fg: (_color, text) => text });
 					renderedHeader = header.render(80).join("\n");
 				},
-				notify: () => {},
+				notify: (message: string) => {
+					notification = message;
+				},
+			},
+			modelRegistry: {
+				getAvailable: () => [],
 			},
 		};
 
@@ -490,14 +503,21 @@ describe("S11-S15 productization layer", () => {
 			height: 24,
 			now: "2026-06-09T00:00:00.000Z",
 		});
+		assert.equal(providerName, VERIGEN_KIMI_PROVIDER_ID);
+		assert.equal(providerModel, VERIGEN_DEFAULT_MODEL_ID);
 		assert.equal(rendererType, VERIGEN_WORKBENCH_CUSTOM_TYPE);
+		const command = commands.get("verigen-workbench");
+		const modelsCommand = commands.get("verigen-models");
 		assert.ok(command);
+		assert.ok(modelsCommand);
 
 		const startHandler = handlers.get("session_start");
 		assert.ok(startHandler);
 		await startHandler({ type: "session_start" }, fakeContext as unknown as ExtensionContext);
 		assert.match(renderedHeader, /VERIGEN|_____/);
 		assert.match(renderedHeader, /Verilog-specialized coding agent/);
+		assert.match(notification, /\/login/);
+		assert.match(notification, /VeriGen Kimi/);
 		assert.equal(widgetKey, undefined);
 		assert.equal(statusText, undefined);
 
@@ -509,6 +529,10 @@ describe("S11-S15 productization layer", () => {
 
 		await command.handler("snapshot", fakeContext as unknown as ExtensionCommandContext);
 		assert.equal(sentCustomType, VERIGEN_WORKBENCH_CUSTOM_TYPE);
+
+		notification = "";
+		await modelsCommand.handler("", fakeContext as unknown as ExtensionCommandContext);
+		assert.match(notification, /VERIGEN_TEST_LLM_API_KEY/);
 	});
 
 	test("splits batched terminal input before applying workbench actions", async () => {
