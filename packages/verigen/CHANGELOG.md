@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed the release binary and npm publish workflow to run on Node.js 24.16.0, matching dependencies that require a newer Node runtime.
+
 ## [0.79.8] - 2026-06-10
 
 ### Added
