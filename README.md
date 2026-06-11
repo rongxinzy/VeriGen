@@ -240,6 +240,30 @@ verigen product-preview --report --output /tmp/verigen-preview-report.md
 verigen product-template --id uart_loopback --output /tmp/verigen-uart-template
 ```
 
+### Quartus Tcl 全流程
+
+ToolRunner 支持 Quartus FPGA 工具链的 Tcl 自动化全流程：
+
+```bash
+# 工程创建 + 综合 + 布局布线 + 时序分析
+verigen tool-runner quartus --rtl top.v
+
+# 分阶段执行
+verigen tool-runner quartus --rtl top.v --stage map       # 只综合
+verigen tool-runner quartus --rtl top.v --stage fit       # 只布局布线
+verigen tool-runner quartus --rtl top.v --stage sta       # 只时序分析
+verigen tool-runner quartus --rtl top.v --stage compile   # 全流程
+
+# 板级编程
+verigen tool-runner quartus --stage pgm --sof output.sof --cable USB-Blaster
+
+# 指定器件与版本
+verigen tool-runner quartus --rtl top.v --family "Cyclone V" --device 5CGXFC7C7F23C8N \
+  --rev PRODUCTION_1.0 --64bit --jvm-heap 4096M --lic 27000@license-server
+```
+
+`quartus_sh` 生成的 Tcl 脚本使用 `project_new` / `project_open` + `execute_module -tool` 驱动编译，输出标准 `EdaToolRunResult`，错误解析支持 `Error (XXXXX):` 和 `Critical Warning` 格式。
+
 ### VeriGen Agent 入口
 
 `verigen agent` 是进入 pi coding-agent 的 VeriGen 专属入口。它会加载：

@@ -70,7 +70,14 @@ verigen tool-runner lint --rtl dut.v --top dut --json
 verigen tool-runner synth --rtl dut.v --top dut --json
 verigen tool-runner himasim --json
 verigen tool-runner quartus --rtl top.v --json
+verigen tool-runner quartus --rtl top.v --stage map                     # 只综合
+verigen tool-runner quartus --rtl top.v --stage fit                     # 只布局布线
+verigen tool-runner quartus --rtl top.v --stage sta                     # 只时序分析
+verigen tool-runner quartus --rtl top.v --stage compile                 # 全流程
+verigen tool-runner quartus --rtl top.v --stage pgm --sof output.sof    # 板级编程
 verigen tool-runner quartus --rtl top.v --family "Cyclone V" --device 5CGXFC7C7F23C8N
+verigen tool-runner quartus --rtl top.v --64bit --jvm-heap 4096M        # 64位+大内存
+verigen tool-runner quartus --rtl top.v --lic 27000@license-server      # 指定许可证
 verigen quality-probe list
 verigen quality-probe run --case l0-mux2 --live
 verigen quality-probe run --case l0-mux2 --live --run-tools
@@ -150,7 +157,7 @@ S6 已新增统一 EDA ToolRunner：
 - `verilator-lint`：Verilator lint profile。
 - `yosys-synth`：Yosys synth/check profile（Tcl 脚本驱动）。
 - `himasim`：Himasim backend placeholder/profile，未安装时返回 `missing_tool`。
-- `quartus`：Quartus Tcl 全流程。自动生成 `.tcl` 脚本，通过 `quartus_sh -t` 执行工程创建 → 综合（map）→ 布局布线（fit）→ 编程文件（asm）→ 时序分析（sta）。支持 `--family` / `--device` 参数指定器件。
+- `quartus`：Quartus Tcl 全流程。支持分阶段执行：project（工程创建）、map（综合）、fit（布局布线）、asm（编程文件）、sta（时序分析）、compile（全流程）、pgm（板级编程）。支持 `--family` / `--device` / `--rev` / `--64bit` / `--jvm-heap` / `--lic` 等参数。
 
 统一输出 schema 包含：
 

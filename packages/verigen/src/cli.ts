@@ -2,7 +2,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { inspect } from "node:util";
-import { runHimasim, runIverilogVvp, runQuartus, runVerilatorLint, runYosysSynth } from "./eda-toolrunner.ts";
+import {
+	type EdaToolStage,
+	runHimasim,
+	runIverilogVvp,
+	runQuartus,
+	runVerilatorLint,
+	runYosysSynth,
+} from "./eda-toolrunner.ts";
 import { GraphifyContext } from "./graphify-context.ts";
 import { getNativeToolsStatus, installBundledNativeTools } from "./native-tools.ts";
 import { bootstrapPythonWorker, type DoctorCheck, doctorVerigenInstall } from "./python-worker-bootstrap.ts";
@@ -98,6 +105,14 @@ Options:
   --tb PATH        Testbench file for tool-runner sim
   --family TEXT    Device family for tool-runner quartus (default: Cyclone IV E)
   --device TEXT    Device part for tool-runner quartus (default: EP4CE10F17C8)
+  --stage TEXT     Quartus stage: project, map, fit, asm, sta, compile, pgm (default: compile)
+  --rev TEXT       Design revision name for tool-runner quartus
+  --64bit          Force 64-bit mode for tool-runner quartus
+  --jvm-heap TEXT  JVM max heap size for tool-runner quartus (e.g. 4096M)
+  --lic TEXT       License server for tool-runner quartus (e.g. 27000@server)
+  --cable TEXT     Programmer cable for tool-runner quartus pgm (default: USB-Blaster)
+  --pgm-mode TEXT  Programmer mode for tool-runner quartus pgm (default: JTAG)
+  --sof PATH       SOF file path for tool-runner quartus pgm
   --vcd PATH       VCD file for trace-panel
   --mismatch LIST  Comma-separated mismatch signals for trace-panel
   --top NAME       Top module for trace-panel
@@ -597,16 +612,44 @@ async function runToolRunner(args: string[]): Promise<number> {
 	}
 
 	if (action === "quartus") {
-		if (rtl.length === 0) {
-			console.error("tool-runner quartus requires --rtl file[,file]");
+		if (rtl.length === 0 && optionValue(args, "--stage") !== "pgm") {
+			console.error("tool-runner quartus requires --rtl file[,file] (except for pgm stage)");
+			return 1;
+		}
+		const stage = optionValue(args, "--stage") ?? "compile";
+		const stageMap: Record<string, EdaToolStage> = {
+			project: "quartus-project",
+			map: "quartus-map",
+			fit: "quartus-fit",
+			asm: "quartus-asm",
+			sta: "quartus-sta",
+			compile: "quartus-compile",
+			pgm: "quartus-pgm",
+		};
+		const edaStage = stageMap[stage];
+		if (!edaStage) {
+			console.error("tool-runner quartus --stage must be project, map, fit, asm, sta, compile, or pgm");
 			return 1;
 		}
 		const result = await runQuartus({
 			rtl,
 			top,
+			stage: edaStage,
 			family: optionValue(args, "--family"),
 			device: optionValue(args, "--device"),
+			revision: optionValue(args, "--rev"),
+			use64Bit: hasFlag(args, "--64bit"),
+			jvmHeapMax: optionValue(args, "--jvm-heap"),
+			licServer: optionValue(args, "--lic"),
 			keepWorkDir: hasFlag(args, "--keep-temp"),
+			programmer:
+				edaStage === "quartus-pgm"
+					? {
+							cable: optionValue(args, "--cable") ?? "USB-Blaster",
+							mode: optionValue(args, "--pgm-mode") ?? "JTAG",
+							sofFile: optionValue(args, "--sof"),
+						}
+					: undefined,
 		});
 		if (hasFlag(args, "--json")) {
 			console.log(JSON.stringify(result, null, 2));
