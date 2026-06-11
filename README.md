@@ -1,38 +1,98 @@
-# VeriGen
+<div align="center">
+  <img src="docs/logo.svg" alt="VeriGen" width="400">
+</div>
 
-VeriGen 是一个基于 pi agent harness 改造的 Verilog 特化 coding agent。它的目标不是做通用代码助手，而是把自然语言规格转成**可验证、可调试、可综合**的 RTL 设计流程。
+<div align="center">
 
-本仓库以 pi monorepo 为底座，在其 TypeScript agent runtime、CLI/TUI、tool calling、模型接入和扩展机制之上，加入 Verilog/RTL 专用能力：
+[![CI](https://github.com/rongxinzy/VeriGen/actions/workflows/ci.yml/badge.svg)](https://github.com/rongxinzy/VeriGen/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/verigen)](https://www.npmjs.com/package/verigen)
+[![License](https://img.shields.io/github/license/rongxinzy/VeriGen)](LICENSE)
+
+</div>
+
+VeriGen 是一个 Verilog 代码生成智能体，围绕**需求理解 → 代码生成 → 仿真验证 → 调试优化**的完整闭环，把自然语言规格转成**可仿真、可综合、可调试**的 RTL 设计。
+
+本仓库以 pi agent harness 为底座，在其 TypeScript agent runtime、CLI/TUI、tool calling、多模型接入和扩展机制之上，加入以下 Verilog/RTL 专用能力：
 
 - **Spec-Anchored KG**：用端口契约和模块关系约束生成，减少接口幻觉
 - **Verilog Playbook RAG**：沉淀工程化知识和历史修复规则
+- **EDA ToolRunner**：统一接入 iverilog/vvp、Verilator、Yosys、Himasim 等仿真与综合工具
 - **AST 波形追踪**：仿真失败后的确定性定位步骤
 - **Graphify 上下文导航**：模型可自主调用的仓库/文档导航
 - **随 npm 分发的 Python Verilog analysis worker**：基于魔改 `pyverilog` fork
 
 ## 工作流程
 
-VeriGen 面向 RTL 设计-验证-修复流水线：
+VeriGen 面向**需求理解 → 代码生成 → 仿真验证 → 调试优化**的完整闭环：
 
 ```text
-规格输入
-  -> 模块契约 / 端口约束
-  -> Spec-Anchored KG
-  -> RTL 生成
-  -> lint / sim / synth
-  -> 仿真失败定位
-  -> AST 波形追踪
-  -> 定向修复
-  -> 复验通过
+                 ┌──────────────────────────────┐
+                 │       需求 / 规格输入          │
+                 │  (文本 / 时序图 / PDF / 图片)   │
+                 └────────────┬─────────────────┘
+                              ▼
+                 ┌──────────────────────────────┐
+                 │       Spec-Anchored KG        │
+                 │    (端口契约 / 模块关系约束)    │
+                 └────────────┬─────────────────┘
+                              ▼
+                 ┌──────────────────────────────┐
+                 │         RTL 代码生成           │
+                 │    (Planner + Coder Agent)     │
+                 └────────────┬─────────────────┘
+                              ▼
+                 ┌──────────────────────────────┐
+                 │    仿真 / 综合 / lint 验证      │
+                 │  iverilog │ Verilator │ Yosys  │
+                 │         Himasim                │
+                 └────────────┬─────────────────┘
+                              │
+                ┌─────────────┴─────────────┐
+                ▼                           ▼
+         ┌──────────────┐          ┌──────────────┐
+         │   通过        │          │   失败        │
+         └──────┬───────┘          └──────┬───────┘
+                │                         ▼
+                │          ┌──────────────────────────┐
+                │          │     失败定位与波形追踪      │
+                │          │   AST 波形追踪 + Debugger  │
+                │          └────────────┬─────────────┘
+                │                         │
+                │          ┌──────────────▼───────────┐
+                │          │     定向修复 (Debugger)    │
+                │          │  Playbook RAG + 历史规则   │
+                │          └──────────────┬───────────┘
+                │                         │
+                └──────────┬──────────────┘
+                           ▼
+                 ┌──────────────────────────────┐
+                 │          输出交付              │
+                 │  可仿真、可综合、可调试的 RTL   │
+                 └──────────────────────────────┘
 ```
 
 核心原则：
 
-- **验证优先**：RTL 不是生成出来就结束，必须能被工具链验证。
+- **闭环验证**：RTL 不是生成出来就结束，必须经过仿真与综合验证。
 - **结构化中间物**：规格、KG、trace、修复建议都要机器可读。
 - **KG 锚定**：用端口契约和模块关系约束生成，减少接口幻觉。
 - **工程化知识**：用 Verilog Playbook 和历史修复规则，而不是把原始规范全文塞进上下文。
-- **极简常驻上下文**：启动时只常驻 VeriGen system prompt 和 extension；Planner、Coder、Verifier、Debugger 与 Playbook 规则按需注入。
+- **极简常驻上下文**：启动时只常驻 VeriGen system prompt 和 extension；Planner、Coder、Verifier、Debugger 与 Playbook 规则按需注入，最小化 token 消耗。
+- **多模型适配**：支持配置多种大模型，包括国产模型，支持私有化部署。
+
+## 核心能力
+
+| 能力 | 说明 |
+|---|---|
+| **多模态输入理解** | 支持文本、时序图、PDF、图片等多种输入格式，自动提取模块功能、端口时序与接口约束 |
+| **多模型适配** | 支持配置多种大模型（含国产模型），可插拔 provider 架构，适配私有化部署场景 |
+| **EDA 工具链集成** | 统一接入 iverilog/vvp、Verilator（lint）、Yosys（逻辑综合）、Himasim（华大九天仿真） |
+| **自动调试优化闭环** | 仿真失败后自动定位（AST 波形追踪）、Debugger 生成修复、复验验证，最多 3 轮收敛 |
+| **测试激励生成** | 自动生成 testbench，支持覆盖率统计 |
+| **MCP 工具配置** | 支持配置 MCP 工具扩展，集成 Himasim 等仿真工具 |
+| **最小 token 消耗** | 极简常驻上下文 + 按需注入 phase/rule，降低推理成本 |
+| **并发多任务** | 支持同时执行多个 Verilog 生成与验证任务 |
+| **私有化部署** | 纯 TypeScript + 受管 Python worker，不依赖云端服务，数据不出域 |
 
 ## 架构
 
@@ -210,18 +270,18 @@ uvx --from graphifyy graphify update . --no-cluster
 
 ### 测试 LLM 端点
 
-Codegen Quality Probe 使用内网 Anthropic-compatible 端点测试 Verilog 生成质量：
+Codegen Quality Probe 支持配置任意兼容的 LLM 端点测试 Verilog 生成质量：
 
 ```bash
-export VERIGEN_TEST_LLM_PROVIDER=anthropic
-export VERIGEN_TEST_LLM_BASE_URL=http://<internal-host>:3000
+export VERIGEN_TEST_LLM_PROVIDER=anthropic     # 或 openai-completions / openrouter 等
+export VERIGEN_TEST_LLM_BASE_URL=http://<host>:<port>
 export VERIGEN_TEST_LLM_MODEL=<model-id>
 export VERIGEN_TEST_LLM_API_KEY=<local-secret>
 ```
 
 兼容实现如果要求 OpenAI 风格路径，可把 base URL 加上 `/v1` 后缀。**API key 不应写入 README、docs、测试 fixture 或 commit。**
 
-- `quality-probe run --live` 把 Coder prompt 发给配置的端点；`--run-tools` 用 ToolRunner 对生成 RTL 执行 `iverilog/vvp` compile/sim，返回结构化 tool result。Verilator lint、Yosys synth 和 Himasim profile 已有统一结果 schema；缺工具时返回 `missing_tool`。
+- `quality-probe run --live` 把 Coder prompt 发给配置的端点；`--run-tools` 用 ToolRunner 对生成 RTL 执行 `iverilog/vvp` compile/sim，返回结构化 tool result（含仿真通过性、测试覆盖率）。Verilator lint、Yosys synth 和 Himasim profile 已有统一结果 schema；缺工具时返回 `missing_tool`。
 - `quality-probe fix-loop` 串起 Planner/Coder/Verifier/Debugger 四 Agent，最多 3 轮。默认 dry-run 用脚本化候选 RTL 先制造一次仿真失败，再由 Debugger repair prompt 驱动下一轮修复；`--live` 把每轮 Coder prompt 发给配置端点。
 
 ## 仓库结构
@@ -246,18 +306,17 @@ export VERIGEN_TEST_LLM_API_KEY=<local-secret>
 
 ## 项目状态
 
-已完成 S0–S15 MVP，覆盖：
+当前已完成以下能力覆盖：
 
-- **基础设施（S0–S4）**：魔改 `pyverilog` fork 独立运行、Python analysis worker（JSONL RPC）、TypeScript 客户端、Spec KG / Playbook RAG / Graphify 迁移、npm 打包与 uv 自举。
-- **Agent 闭环（S5–S8）**：VeriGen mode/profile 与 `verigen agent` 入口、EDA ToolRunner（`iverilog/vvp`、Verilator、Yosys、Himasim 统一 schema）、Quality Probe fix-loop（四 Agent、最多 3 轮）、统一 Context Router（按预算裁剪 KG/Playbook/Graphify/trace/tool results）。
-- **板级与评测（S9–S12）**：board profile/schema、mock programmer backend、dry-run hardware flow（先真实仿真再 mock 上板）、release smoke checklist、evaluation suite（pass@1、3 轮收敛率、失败类型分布）。
-- **产品化（S13–S15）**：agent 内按需 VeriGen 状态面板、内部 dogfood/debug product workbench TUI、onboarding、provider config、project templates、board profile 管理、layout persistence、报告导出和 session replay。
+- **基础设施**：魔改 `pyverilog` fork 独立运行、Python analysis worker（JSONL RPC）、TypeScript 客户端、Spec KG / Playbook RAG / Graphify 迁移、npm 打包与 uv 自举。
+- **Agent 闭环**：VeriGen mode/profile 与 `verigen agent` 入口、EDA ToolRunner（`iverilog/vvp`、Verilator、Yosys、Himasim 统一 schema）、Quality Probe fix-loop（四 Agent、最多 3 轮）、统一 Context Router（按预算裁剪 KG/Playbook/Graphify/trace/tool results）。
+- **板级与评测**：board profile/schema、mock programmer backend、dry-run hardware flow（先真实仿真再 mock 上板）、release smoke checklist、evaluation suite（pass@1、3 轮收敛率、失败类型分布）。
+- **产品化**：agent 内按需 VeriGen 状态面板、内部 dogfood/debug product workbench TUI、onboarding、provider config、project templates、board profile 管理、layout persistence、报告导出和 session replay。
 
 当前边界：
 
-- 还没有接真实 FPGA 上板流程；无设备阶段先做 mock/dry-run board backend。真实 FPGA 测试放到 S16，应从固定 `blink_led` bring-up 开始，再接 VeriGen 生成 RTL。
-- 还没有把 Himasim/Vivado/Quartus/Yosys profile 做成完整 board profile。
-- `product-workbench` 是内部 dogfood/debug 入口，不作为默认用户 TUI 形态；主体验保持 pi 的 chat-first 输入框和 `/` 指令引用。
+- 还没有接真实 FPGA 上板流程；无设备阶段先做 mock/dry-run board backend。后续可从固定 `blink_led` bring-up 开始，再接入 VeriGen 生成 RTL 的真正板级流程。
+- 还没有把 Himasim/Vivado/Quartus/Yosys profile 做成完整 board profile，当前已有统一结果 schema 和 missing_tool 降级。
 
 各阶段完整交付物和下一步计划见 [VeriGen 产品化路线图](docs/ROADMAP-VeriGen.md)。
 
