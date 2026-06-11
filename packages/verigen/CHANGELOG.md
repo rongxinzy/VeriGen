@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed the npm publish path to exclude test-generated bundled native tools from the tarball.
+
 ## [0.79.15] - 2026-06-11
 
 ### Changed

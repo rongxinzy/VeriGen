@@ -13,6 +13,7 @@ import {
 } from "../src/python-worker-bootstrap.ts";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = resolve(packageRoot, "../..");
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -79,6 +80,9 @@ describe("S4 npm packaging surface", () => {
 		assert.equal(codingAgentExtensionExport.types, "./dist/verigen-coding-agent-extension.d.ts");
 		assert.ok(Array.isArray(parsed.files));
 		assert.ok(parsed.files.includes("dist"));
+		assert.ok(parsed.files.includes("!dist/native-tools"));
+		assert.ok(parsed.files.includes("!dist/native-tools/**"));
+		assert.ok(parsed.files.includes("!dist/native-tools-manifest.json"));
 		assert.ok(parsed.files.includes("install.ps1"));
 		assert.ok(parsed.files.includes("install.sh"));
 		assert.ok(parsed.files.includes("README.md"));
@@ -137,6 +141,12 @@ describe("S4 npm packaging surface", () => {
 		assert.match(installPowerShell, /11\.13\.0/);
 		assert.match(installPowerShell, /Git Bash/);
 		assert.match(installPowerShell, /ExecutionPolicy Bypass/);
+
+		const publishScript = readFileSync(join(repoRoot, "scripts", "publish.mjs"), "utf8");
+		assert.match(publishScript, /removeGeneratedNativeTools/);
+		assert.match(publishScript, /dist", "native-tools"/);
+		assert.match(publishScript, /dist", "native-tools-manifest\.json"/);
+		assert.match(publishScript, /assertGeneratedNativeToolsExcluded/);
 	});
 });
 

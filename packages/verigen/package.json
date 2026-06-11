@@ -21,6 +21,9 @@
 	},
 	"files": [
 		"dist",
+		"!dist/native-tools",
+		"!dist/native-tools/**",
+		"!dist/native-tools-manifest.json",
 		"install.ps1",
 		"install.sh",
 		"README.md",

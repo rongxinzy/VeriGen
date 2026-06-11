@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 const packageToPublish = { directory: "packages/verigen", name: "verigen" };
@@ -42,6 +42,20 @@ function readPackageJson(directory) {
 function assertBuildOutputExists(directory) {
 	if (!existsSync(join(directory, "dist"))) {
 		throw new Error(`${directory}/dist does not exist. Run npm run build before publishing.`);
+	}
+}
+
+function removeGeneratedNativeTools(directory) {
+	rmSync(join(directory, "dist", "native-tools"), { recursive: true, force: true });
+	rmSync(join(directory, "dist", "native-tools-manifest.json"), { force: true });
+}
+
+function assertGeneratedNativeToolsExcluded(directory) {
+	if (existsSync(join(directory, "dist", "native-tools"))) {
+		throw new Error(`${directory}/dist/native-tools must not be present before npm publish.`);
+	}
+	if (existsSync(join(directory, "dist", "native-tools-manifest.json"))) {
+		throw new Error(`${directory}/dist/native-tools-manifest.json must not be present before npm publish.`);
 	}
 }
 
@@ -114,6 +128,8 @@ if (typeof version !== "string" || version.length === 0) {
 console.log(`Publishing VeriGen package ${packageToPublish.name}@${version}${dryRun ? " (dry run)" : ""}\n`);
 
 assertBuildOutputExists(packageToPublish.directory);
+removeGeneratedNativeTools(packageToPublish.directory);
+assertGeneratedNativeToolsExcluded(packageToPublish.directory);
 const published = isPublished(packageToPublish.name, version);
 
 if (dryRun) {
