@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Restored the VeriGen TUI startup identity with a compact colored logo header and responsive narrow-terminal fallback.
+
 ## [0.79.13] - 2026-06-11
 
 ### Changed

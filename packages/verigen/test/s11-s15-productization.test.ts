@@ -519,6 +519,7 @@ describe("S11-S15 productization layer", () => {
 		let providerName: string | undefined;
 		let providerModel: string | undefined;
 		let renderedHeader = "";
+		let renderedCompactHeader = "";
 		let widgetKey: string | undefined;
 		let widgetPlacement: string | undefined;
 		let widgetMounted = false;
@@ -578,12 +579,17 @@ describe("S11-S15 productization layer", () => {
 				setHeader: (factory: unknown) => {
 					if (typeof factory !== "function") {
 						renderedHeader = "";
+						renderedCompactHeader = "";
 						return;
 					}
 					const header = (
-						factory as (tui: unknown, theme: { fg: (_color: string, text: string) => string }) => WidgetComponent
-					)({}, { fg: (_color, text) => text });
+						factory as (
+							tui: unknown,
+							theme: { fg: (_color: string, text: string) => string; bold: (text: string) => string },
+						) => WidgetComponent
+					)({}, { fg: (_color, text) => text, bold: (text) => text });
 					renderedHeader = header.render(80).join("\n");
+					renderedCompactHeader = header.render(34).join("\n");
 				},
 				notify: (message: string) => {
 					notification = message;
@@ -613,8 +619,12 @@ describe("S11-S15 productization layer", () => {
 		const startHandler = handlers.get("session_start");
 		assert.ok(startHandler);
 		await startHandler({ type: "session_start" }, fakeContext as unknown as ExtensionContext);
-		assert.match(renderedHeader, /VERIGEN|_____/);
-		assert.match(renderedHeader, /Verilog-specialized coding agent/);
+		assert.match(renderedHeader, /▐█▛█▛█▌\s+VeriGen/);
+		assert.match(renderedHeader, /▐█████▌\s+RTL design review and generation/);
+		assert.match(renderedHeader, /Setup: \/verigen-models/);
+		assert.match(renderedCompactHeader, /▐█▛█▛█▌\s+VeriGen/);
+		assert.match(renderedCompactHeader, /RTL review \+ gen/);
+		assert.ok(renderedCompactHeader.split("\n").every((line) => line.length <= 34));
 		assert.match(notification, /\/verigen-models/);
 		assert.match(notification, /VERIGEN_TEST_LLM_API_KEY/);
 		assert.equal(widgetKey, "verigen-product-workbench");

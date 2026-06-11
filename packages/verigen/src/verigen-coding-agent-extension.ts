@@ -418,30 +418,50 @@ function fitLine(line: string, width: number): string {
 	return `${line.slice(0, width - 1)}~`;
 }
 
-function centerLine(line: string, width: number): string {
-	const fitted = fitLine(line, width);
-	const padding = Math.max(0, Math.floor((width - fitted.length) / 2));
-	return `${" ".repeat(padding)}${fitted}`;
-}
-
-function mutedHint(width: number): string {
-	if (width < 56) return "RTL | tests | traces | FPGA";
-	return "RTL, testbench, waveform debug, and FPGA bring-up.";
-}
+const verigenLogoTop = "▐█▛█▛█▌";
+const verigenLogoBottom = "▐█████▌";
+const verigenLogoTextGap = "  ";
 
 function commandHint(width: number): string {
-	if (width < 56) return "/verigen-models | /verigen-workbench";
+	if (width < 36) return "/models | /workbench";
+	if (width < 56) return "/verigen-models | /workbench";
 	return "Setup: /verigen-models   Dashboard: /verigen-workbench show";
+}
+
+function headerSubtitle(width: number): string {
+	if (width < 36) return "RTL review + gen";
+	if (width < 56) return "RTL review + generation";
+	return "RTL design review and generation";
+}
+
+function coloredBrand(theme: Theme, width: number): string {
+	const brand = fitLine("VeriGen", width);
+	if (brand !== "VeriGen") return theme.bold(theme.fg("accent", brand));
+	return `${theme.bold(theme.fg("accent", "Veri"))}${theme.bold(theme.fg("success", "Gen"))}`;
+}
+
+function logoContentWidth(textWidth: number): number {
+	return verigenLogoTop.length + verigenLogoTextGap.length + Math.max(0, textWidth);
 }
 
 function renderVerigenStartupHeader(theme: Theme, width: number): string[] {
 	const columns = Math.max(1, width);
-	const compact = columns < 52;
-	const title = compact ? "Verilog coding agent" : "Verilog-specialized coding agent";
+	const textWidth = Math.max(1, columns - verigenLogoTop.length - verigenLogoTextGap.length);
+	const brand = fitLine("VeriGen", textWidth);
+	const subtitle = fitLine(headerSubtitle(columns), textWidth);
+	const command = fitLine(commandHint(columns), textWidth);
+	const blockWidth = Math.max(
+		logoContentWidth(brand.length),
+		logoContentWidth(subtitle.length),
+		logoContentWidth(command.length),
+	);
+	const padding = " ".repeat(Math.max(0, Math.floor((columns - blockWidth) / 2)));
+	const textIndent = `${padding}${" ".repeat(verigenLogoTop.length)}${verigenLogoTextGap}`;
+
 	return [
-		theme.fg("accent", centerLine(`VERIGEN  ${title}`, columns)),
-		theme.fg("dim", centerLine(mutedHint(columns), columns)),
-		theme.fg("dim", centerLine(commandHint(columns), columns)),
+		`${padding}${theme.fg("accent", verigenLogoTop)}${verigenLogoTextGap}${coloredBrand(theme, textWidth)}`,
+		`${padding}${theme.fg("accent", verigenLogoBottom)}${verigenLogoTextGap}${theme.fg("dim", subtitle)}`,
+		`${textIndent}${theme.fg("muted", command)}`,
 		"",
 	];
 }
