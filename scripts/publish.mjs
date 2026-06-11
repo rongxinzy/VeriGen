@@ -69,6 +69,38 @@ function isPublished(name, version) {
 	throw new Error(output ? `Failed to query ${name}@${version}\n${output}` : `Failed to query ${name}@${version}`);
 }
 
+function errorText(error) {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function isTransparencyLogConflict(error) {
+	const text = errorText(error);
+	return (
+		text.includes("TLOG_CREATE_ENTRY_ERROR") ||
+		text.includes("equivalent entry already exists in the transparency log")
+	);
+}
+
+function publishPackage(directory, name, version) {
+	const provenanceArgs = ["publish", "--access", "public", "--provenance", "--ignore-scripts", "--registry", registry];
+	try {
+		run("npm", provenanceArgs, { cwd: directory });
+		return;
+	} catch (error) {
+		if (!isTransparencyLogConflict(error)) {
+			throw error;
+		}
+		if (isPublished(name, version)) {
+			console.log(`Skipping ${name}@${version}: already published after npm transparency log conflict\n`);
+			return;
+		}
+		console.warn(
+			"npm provenance transparency log entry already exists, but the package version is not published. Retrying once without --provenance.",
+		);
+		run("npm", ["publish", "--access", "public", "--ignore-scripts", "--registry", registry], { cwd: directory });
+	}
+}
+
 const packageJson = readPackageJson(packageToPublish.directory);
 if (packageJson.name !== packageToPublish.name) {
 	throw new Error(`${packageToPublish.directory}/package.json has name ${packageJson.name}, expected ${packageToPublish.name}`);
@@ -100,7 +132,5 @@ if (published) {
 	process.exit(0);
 }
 
-run("npm", ["publish", "--access", "public", "--provenance", "--ignore-scripts", "--registry", registry], {
-	cwd: packageToPublish.directory,
-});
+publishPackage(packageToPublish.directory, packageToPublish.name, version);
 console.log();
