@@ -2,6 +2,8 @@ import type { Component } from "@earendil-works/pi-tui";
 import {
 	applyProductWorkbenchAction,
 	type ProductWorkbenchModel,
+	type ProductWorkbenchStatusPanelOptions,
+	renderProductWorkbenchStatusPanel,
 	renderProductWorkbenchTui,
 	type WorkbenchInteractionAction,
 } from "./s15-product-workbench.ts";
@@ -131,11 +133,34 @@ export class ProductWorkbenchTuiComponent implements Component {
 	}
 }
 
+export class ProductWorkbenchStatusPanelComponent implements Component {
+	private readonly model: ProductWorkbenchModel;
+	private readonly options: ProductWorkbenchStatusPanelOptions;
+
+	constructor(model: ProductWorkbenchModel, options: ProductWorkbenchStatusPanelOptions = {}) {
+		this.model = model;
+		this.options = options;
+	}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		return renderProductWorkbenchStatusPanel(this.model, width, this.options).split("\n");
+	}
+}
+
 export function createProductWorkbenchPiTuiComponent(
 	model: ProductWorkbenchModel,
 	options: ProductWorkbenchTuiComponentOptions = {},
 ): Component {
 	return new ProductWorkbenchTuiComponent(model, options);
+}
+
+export function createProductWorkbenchStatusPanelPiTuiComponent(
+	model: ProductWorkbenchModel,
+	options: ProductWorkbenchStatusPanelOptions = {},
+): Component {
+	return new ProductWorkbenchStatusPanelComponent(model, options);
 }
 
 export function createProductWorkbenchPiTuiMount(
@@ -169,6 +194,19 @@ export async function runProductWorkbenchTui(
 	}
 	return await new Promise<ProductWorkbenchModel>((resolve) => {
 		let current = model;
+		let closed = false;
+		const finish = (finalModel: ProductWorkbenchModel) => {
+			if (closed) return;
+			closed = true;
+			current = finalModel;
+			process.stdin.off("data", onData);
+			process.stdout.off("resize", onResize);
+			process.stdin.setRawMode?.(false);
+			process.stdin.pause();
+			process.stdout.write("\x1b[?25h\n");
+			options.onExit?.(finalModel);
+			resolve(current);
+		};
 		const component = new ProductWorkbenchTuiComponent(model, {
 			height: options.height,
 			onModelChange: (nextModel) => {
@@ -176,21 +214,14 @@ export async function runProductWorkbenchTui(
 				options.onModelChange?.(nextModel);
 				writeFrame(component.render(options.width ?? process.stdout.columns ?? 120));
 			},
-			onExit: (finalModel) => {
-				current = finalModel;
-				process.stdin.off("data", onData);
-				process.stdout.off("resize", onResize);
-				process.stdin.setRawMode?.(false);
-				process.stdin.pause();
-				process.stdout.write("\x1b[?25h\n");
-				options.onExit?.(finalModel);
-				resolve(current);
-			},
+			onExit: finish,
 		});
 		const onResize = () => {
+			if (closed) return;
 			writeFrame(component.render(options.width ?? process.stdout.columns ?? 120));
 		};
 		const onData = (data: Buffer | string) => {
+			if (closed) return;
 			for (const event of splitProductWorkbenchInput(data.toString("utf8"))) {
 				component.handleInput(event);
 			}

@@ -223,6 +223,11 @@ export interface ProductWorkbenchOptions {
 	env?: Record<string, string | undefined>;
 }
 
+export interface ProductWorkbenchStatusPanelOptions {
+	expanded?: boolean;
+	height?: number;
+}
+
 function providerConfig(): ProviderConfig {
 	return {
 		provider: "anthropic",
@@ -1029,6 +1034,121 @@ function wrapLines(lines: string[], width: number, maxLines: number): string[] {
 	return output;
 }
 
+function readableValue(value: string): string {
+	return value.replace(/[-_]/g, " ");
+}
+
+function statusLabel(status: ProductWorkbenchModel["status"]): string {
+	if (status === "needs_setup") return "setup needed";
+	return readableValue(status);
+}
+
+function statusShortLabel(status: ProductWorkbenchModel["status"]): string {
+	if (status === "needs_setup") return "setup";
+	return readableValue(status);
+}
+
+function focusLabel(focus: WorkbenchFocusPane): string {
+	if (focus === "left") return "pipeline";
+	if (focus === "center") return "log";
+	return "inspector";
+}
+
+function firstBlockedStep(model: ProductWorkbenchModel): OnboardingStep | undefined {
+	return model.onboarding.find((step) => step.status === "blocked");
+}
+
+function firstPendingStep(model: ProductWorkbenchModel): OnboardingStep | undefined {
+	return model.onboarding.find((step) => step.status === "pending");
+}
+
+function modelStatusLine(model: ProductWorkbenchModel): string {
+	if (model.providerConfigPage.status === "configured") return `${model.provider.model} ready`;
+	return `${model.provider.model} needs API key`;
+}
+
+function runtimeStatusLine(model: ProductWorkbenchModel): string {
+	const blocked = firstBlockedStep(model);
+	if (blocked?.id === "doctor") return "environment check blocked";
+	const pending = firstPendingStep(model);
+	if (pending?.id === "doctor") return "not checked";
+	return "ready";
+}
+
+function currentTaskLine(model: ProductWorkbenchModel): string {
+	const blocked = firstBlockedStep(model);
+	if (blocked) return `Fix ${blocked.title}`;
+	const pending = firstPendingStep(model);
+	if (pending) return pending.title;
+	return "Ready for RTL work";
+}
+
+function recentIssueLine(model: ProductWorkbenchModel): string {
+	if (model.providerConfigPage.status !== "configured") return `${model.provider.apiKeyEnvVar} is not set`;
+	const requiredRepair = model.doctorRepairSuggestions.find((suggestion) => suggestion.severity === "required");
+	if (requiredRepair) return requiredRepair.message;
+	const optionalRepair = model.doctorRepairSuggestions[0];
+	return optionalRepair?.message ?? "none";
+}
+
+function nextCommandLine(model: ProductWorkbenchModel): string {
+	if (model.providerConfigPage.status !== "configured") return "/verigen-models";
+	const blocked = firstBlockedStep(model);
+	if (blocked) return blocked.action;
+	const pending = firstPendingStep(model);
+	if (pending) return pending.action;
+	return "Ask VeriGen for RTL, tests, traces, or board bring-up";
+}
+
+function statusPanelSummaryLines(model: ProductWorkbenchModel): string[] {
+	return [
+		`Model: ${modelStatusLine(model)}`,
+		`Python/uv: ${runtimeStatusLine(model)}`,
+		`Task: ${currentTaskLine(model)}`,
+		`Issue: ${recentIssueLine(model)}`,
+		`Next: ${nextCommandLine(model)}`,
+	];
+}
+
+function statusPanelDetailLines(model: ProductWorkbenchModel): string[] {
+	return [
+		"",
+		"Logs",
+		...model.taskLog.slice(0, 3).map((entry) => `- ${entry.stage}: ${entry.message}`),
+		"",
+		"Replay",
+		...model.sessionReplay.slice(0, 3).map((event) => `- #${event.index} ${event.stage}: ${event.summary}`),
+		"",
+		"Board",
+		...model.boardProfileManagement.profiles
+			.slice(0, 1)
+			.map((profile) => `- ${profile.id}: ${profile.fpgaPart}, ${profile.programmer}`),
+		"",
+		"Report",
+		...model.release.smokeSteps.slice(0, 2).map((step) => `- ${step.id}: ${step.status}`),
+	];
+}
+
+export function renderProductWorkbenchStatusPanel(
+	model: ProductWorkbenchModel,
+	width = 100,
+	options: ProductWorkbenchStatusPanelOptions = {},
+): string {
+	const resolvedWidth = Math.max(40, width);
+	const title = options.expanded ? "VeriGen Status Details" : "VeriGen Status";
+	const suffix = options.expanded ? "/verigen-workbench summary" : "/verigen-workbench details";
+	const lines = [
+		`${title} (${statusLabel(model.status)})`,
+		...statusPanelSummaryLines(model),
+		`Details: ${suffix}`,
+		...(options.expanded ? statusPanelDetailLines(model) : []),
+	];
+	const maxLines = options.height ?? (options.expanded ? 18 : 7);
+	return wrapLines(lines, resolvedWidth, maxLines)
+		.map((line) => padLine(line, resolvedWidth))
+		.join("\n");
+}
+
 function panel(title: string, lines: string[], width: number, height: number, focused = false): string[] {
 	const safeWidth = Math.max(12, width);
 	const contentWidth = Math.max(8, safeWidth - 4);
@@ -1080,11 +1200,14 @@ function activeInspector(model: ProductWorkbenchModel): WorkbenchInspectorTab {
 }
 
 function leftPaneLines(model: ProductWorkbenchModel): string[] {
+	const selected = activeInspector(model);
 	return [
-		`status: ${model.status}`,
-		`focus: ${model.layout.focus}`,
+		`state: ${statusShortLabel(model.status)}`,
+		`focus: ${focusLabel(model.layout.focus)}`,
 		`density: ${model.layout.density}`,
-		`provider: ${model.provider.model}`,
+		`view: ${selected.title}`,
+		"model:",
+		model.provider.model,
 		"",
 		"pipeline:",
 		...model.pipelineNavigator.map((stage, index) => `${String(index + 1).padStart(2, "0")} ${stage}`),
@@ -1143,9 +1266,41 @@ function mediumInspectorLines(model: ProductWorkbenchModel): string[] {
 	];
 }
 
+function narrowInspectorLines(model: ProductWorkbenchModel): string[] {
+	const selected = activeInspector(model);
+	return [
+		`view: ${selected.title}`,
+		selected.content,
+		"",
+		"tabs:",
+		...model.inspectorTabs.map((tab) => {
+			const marker = tab.id === selected.id ? ">" : " ";
+			return `${marker} ${tab.title}`;
+		}),
+	];
+}
+
+function headerContext(model: ProductWorkbenchModel, width: number): string {
+	const state = statusLabel(model.status);
+	const focus = focusLabel(model.layout.focus);
+	const tab = activeInspector(model).title;
+	if (width < 56) return `${state} | ${tab} | ${focus}`;
+	if (width < 80) return `${state} | focus ${focus} | tab ${tab}`;
+	return `${state} | focus ${focus} | tab ${tab} | model ${model.provider.model}`;
+}
+
 function footer(model: ProductWorkbenchModel, width: number): string[] {
-	const keys = model.keybindings.map((binding) => `${binding.key}:${binding.action}`).join("  ");
-	return ["-".repeat(width), padLine(`Keys ${keys}`, width), "=".repeat(width)];
+	const keys =
+		width < 56
+			? "tab tabs | arrows focus | q quit"
+			: width < 96
+				? "tab tabs | arrows focus | space density | q quit"
+				: "tab/shift-tab tabs | arrows focus | space density | enter open | r rerun | e export | q quit";
+	const context =
+		width < 56
+			? `Focus ${focusLabel(model.layout.focus)} | ${activeInspector(model).title}`
+			: `Focus ${focusLabel(model.layout.focus)} | Tab ${activeInspector(model).title} | Density ${model.layout.density}`;
+	return ["-".repeat(width), padLine(`Keys ${keys}`, width), padLine(context, width)];
 }
 
 export function renderProductWorkbenchTui(model: ProductWorkbenchModel, width = 120, height = 36): string {
@@ -1153,11 +1308,8 @@ export function renderProductWorkbenchTui(model: ProductWorkbenchModel, width = 
 	const resolvedHeight = Math.max(18, height);
 	const header = [
 		"=".repeat(resolvedWidth),
-		padLine(`${model.title} :: product TUI`, resolvedWidth),
-		padLine(
-			`status=${model.status} focus=${model.layout.focus} inspector=${model.layout.selectedInspector} density=${model.layout.density} provider=${model.provider.provider}/${model.provider.model}`,
-			resolvedWidth,
-		),
+		padLine(model.title, resolvedWidth),
+		padLine(headerContext(model, resolvedWidth), resolvedWidth),
 		"=".repeat(resolvedWidth),
 	];
 	const bodyHeight = Math.max(8, resolvedHeight - header.length - 3);
@@ -1200,7 +1352,7 @@ export function renderProductWorkbenchTui(model: ProductWorkbenchModel, width = 
 		const top = panel("Pipeline", leftPaneLines(model), resolvedWidth, topHeight, model.layout.focus === "left");
 		const bottom = panel(
 			"Inspector",
-			mediumInspectorLines(model),
+			narrowInspectorLines(model),
 			resolvedWidth,
 			bottomHeight,
 			model.layout.focus !== "left",

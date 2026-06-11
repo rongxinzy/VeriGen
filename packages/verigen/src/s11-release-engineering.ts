@@ -440,7 +440,7 @@ export function verifyDistReleaseSmoke(options: VerifyDistReleaseSmokeOptions = 
 		),
 		check(
 			"dist-prompt-assets",
-			"built VeriGen prompt assets",
+			"built VeriGen on-demand prompt assets",
 			checkStatus(
 				existsSync(join(assetsRoot, "prompts", "verigen-system.md")) &&
 					existsSync(join(assetsRoot, "prompts", "verigen-coder.md")) &&
@@ -453,7 +453,7 @@ export function verifyDistReleaseSmoke(options: VerifyDistReleaseSmokeOptions = 
 		),
 		check(
 			"dist-skill-assets",
-			"built VeriGen skill assets",
+			"built VeriGen rule pack assets",
 			checkStatus(existsSync(join(assetsRoot, "skills", "verigen-playbook.md"))),
 			join(assetsRoot, "skills"),
 			"Ensure prepack copies .pi/skills/verigen-*.md into dist/pi-assets/skills.",
@@ -534,14 +534,14 @@ export function createReleasePackInstallSmokePlan(
 			title: "Verify installed dist package surface",
 			command: command([installedBin, "release-smoke", "--verify-dist", "--json"]),
 			required: true,
-			notes: "Checks built CLI/API/extension, workbench wiring, prompt/skill assets, Python worker, and pyverilog vendor.",
+			notes: "Checks built CLI/API/extension, agent wiring, on-demand prompt/rule assets, Python worker, and pyverilog vendor.",
 		},
 		{
 			id: "installed-agent-extension",
 			title: "Verify installed agent launch wiring",
 			command: command([installedBin, "agent", "--dry-run", "--json"]),
 			required: true,
-			notes: "Proves installed verigen agent loads bundled prompts, skills, and the S15 workbench extension.",
+			notes: "Proves installed verigen agent launches with minimal resident context and the VeriGen extension.",
 		},
 		{
 			id: "installed-product-tui",
@@ -637,7 +637,7 @@ export function createReleaseEngineeringReport(): ReleaseEngineeringReport {
 			command: "verigen agent --dry-run --json",
 			required: true,
 			status: "pending",
-			notes: "Verifies the pi launch command includes VeriGen prompts, skills, and the S15 workbench extension.",
+			notes: "Verifies the pi launch command includes the minimal VeriGen system prompt and extension.",
 		},
 		{
 			id: "product-tui",
@@ -653,7 +653,7 @@ export function createReleaseEngineeringReport(): ReleaseEngineeringReport {
 			command: "verigen release-smoke --verify-dist --json",
 			required: true,
 			status: "pending",
-			notes: "Verifies built dist CLI/API/extension, prompt assets, skill assets, Python worker, and pyverilog vendor paths before npm pack.",
+			notes: "Verifies built dist CLI/API/extension, on-demand prompt/rule assets, Python worker, and pyverilog vendor paths before npm pack.",
 		},
 		{
 			id: "hardware-flow",

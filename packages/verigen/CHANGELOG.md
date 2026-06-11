@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Reduced VeriGen TUI startup noise and changed the agent workbench integration into an on-demand status panel, preserving the pi editor flow while keeping the full product workbench as a dogfood/debug TUI.
+- Reduced `verigen agent` resident prompt context by loading only the system prompt and extension at startup, with expert phase prompts and Playbook rules injected on demand through extension commands.
+
 ## [0.79.12] - 2026-06-10
 
 ### Fixed

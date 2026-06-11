@@ -20,7 +20,7 @@ import {
 	createGraphifyStatusToolDefinition,
 	createGraphifyUpdateToolDefinition,
 } from "./graphify-tools.ts";
-import { createProductWorkbenchPiTuiComponent } from "./s15-product-tui.ts";
+import { createProductWorkbenchStatusPanelPiTuiComponent } from "./s15-product-tui.ts";
 import {
 	createProductWorkbenchModel,
 	type ProductWorkbenchModel,
@@ -28,9 +28,166 @@ import {
 } from "./s15-product-workbench.ts";
 
 export const VERIGEN_WORKBENCH_CUSTOM_TYPE = "verigen.product-workbench";
+export const VERIGEN_PHASE_CONTEXT_CUSTOM_TYPE = "verigen.phase-context";
+export const VERIGEN_RULE_CONTEXT_CUSTOM_TYPE = "verigen.rule-context";
 export const VERIGEN_KIMI_PROVIDER_ID = "verigen-kimi";
 export const VERIGEN_DEFAULT_MODEL_ID = "kimi-for-coding";
 export const VERIGEN_DEFAULT_BASE_URL = "http://172.18.5.179:3000";
+
+type VerigenExpertPhase = "planner" | "coder" | "verifier" | "debugger";
+
+interface VerigenPhaseProfile {
+	name: VerigenExpertPhase;
+	instructions: string[];
+}
+
+interface VerigenPlaybookRule {
+	id: string;
+	phases: VerigenExpertPhase[];
+	triggers: string[];
+	summary: string;
+	checks: string[];
+}
+
+interface VerigenContextInjection {
+	content: string;
+	ruleIds: string[];
+}
+
+interface VerigenPhaseContextDetails {
+	phase: VerigenExpertPhase;
+	query: string;
+	ruleIds: string[];
+}
+
+interface VerigenRuleContextDetails {
+	query: string;
+	ruleIds: string[];
+}
+
+export interface VerigenBeforeAgentStartEvent {
+	type: "before_agent_start";
+	prompt: string;
+}
+
+export interface VerigenBeforeAgentStartResult {
+	message?: {
+		customType: string;
+		content: string;
+		display: boolean;
+		details?: unknown;
+	};
+}
+
+export type VerigenExtensionEvent = { type: "session_start" } | { type: "turn_end" } | VerigenBeforeAgentStartEvent;
+
+export type VerigenExtensionHandlerResult = undefined | VerigenBeforeAgentStartResult;
+
+const phaseAliases: Record<string, VerigenExpertPhase> = {
+	plan: "planner",
+	planner: "planner",
+	code: "coder",
+	coder: "coder",
+	implement: "coder",
+	verify: "verifier",
+	verifier: "verifier",
+	debug: "debugger",
+	debugger: "debugger",
+	repair: "debugger",
+};
+
+const phaseProfiles: Record<VerigenExpertPhase, VerigenPhaseProfile> = {
+	planner: {
+		name: "planner",
+		instructions: [
+			"Produce a module contract before RTL: ports, widths, clock/reset behavior, invariants, and assumptions.",
+			"Build a small task DAG and identify the KG nodes or source files that constrain the work.",
+			"Use Graphify for repo or docs navigation; avoid loading whole repositories or broad raw specs.",
+		],
+	},
+	coder: {
+		name: "coder",
+		instructions: [
+			"Implement the smallest RTL diff that satisfies the contract and existing module interface.",
+			"Use explicit widths, localparam states, nonblocking sequential assignments, and synthesizable SystemVerilog subsets.",
+			"Do not invent ports, rename interfaces, or change reset/clock semantics without an explicit contract update.",
+		],
+	},
+	verifier: {
+		name: "verifier",
+		instructions: [
+			"Run or request the narrowest relevant lint, simulation, formal, or synth check.",
+			"Report compile_error, sim_fail, width_warning, synth_fail, or missing_tool with file, line, and command evidence.",
+			"On simulation mismatch, require deterministic trace context before proposing RTL repair.",
+		],
+	},
+	debugger: {
+		name: "debugger",
+		instructions: [
+			"Start from the tool issue and trace signal controller chain, not from speculation.",
+			"Propose the smallest repair tied to a contract item, playbook rule, KG node, or traced signal.",
+			"After each repair, rerun the narrow verification command that exposed the failure.",
+		],
+	},
+};
+
+const playbookRules: VerigenPlaybookRule[] = [
+	{
+		id: "fsm-localparam-case",
+		phases: ["planner", "coder", "verifier", "debugger"],
+		triggers: ["fsm", "state", "case", "latch", "localparam", "default"],
+		summary: "Represent FSM states with explicit localparams and cover every state transition in a full case.",
+		checks: [
+			"Every state has a declared encoding width.",
+			"Combinational next-state logic has defaults before the case.",
+			"Unreachable or illegal states have an explicit recovery path.",
+		],
+	},
+	{
+		id: "width-explicit-casts",
+		phases: ["planner", "coder", "verifier", "debugger"],
+		triggers: ["width", "cast", "truncation", "extension", "signed", "vector", "overflow"],
+		summary: "Make width extension, truncation, and signedness conversions explicit at assignment boundaries.",
+		checks: [
+			"Assignment RHS width matches the destination width or uses an explicit slice/concat/cast.",
+			"Signed math operands are deliberately signed or deliberately unsigned.",
+			"Tool width warnings are treated as verifier issues until explained.",
+		],
+	},
+	{
+		id: "seq-nonblocking",
+		phases: ["coder", "verifier", "debugger"],
+		triggers: ["always_ff", "posedge", "negedge", "sequential", "nonblocking", "blocking", "reset"],
+		summary: "Use nonblocking assignments in sequential logic and keep reset behavior contract-aligned.",
+		checks: [
+			"Clocked blocks use nonblocking assignments for registers.",
+			"Reset polarity and sync/async behavior match the module contract.",
+			"No combinational temporary assignment is accidentally promoted to state.",
+		],
+	},
+	{
+		id: "tb-mismatch-wave-trace",
+		phases: ["verifier", "debugger"],
+		triggers: ["testbench", "mismatch", "wave", "vcd", "trace", "dut", "reference", "sim"],
+		summary: "For DUT/reference mismatches, inspect the trimmed waveform and controller chain before editing RTL.",
+		checks: [
+			"Mismatch time, expected value, actual value, and signal name are captured.",
+			"Trace context includes controlling signals and nearby RTL snippets.",
+			"The proposed fix explains why the traced controller caused the mismatch.",
+		],
+	},
+	{
+		id: "tool-subset-sv",
+		phases: ["planner", "coder", "verifier"],
+		triggers: ["iverilog", "verilator", "yosys", "systemverilog", "syntax", "unsupported", "synth"],
+		summary: "Target the project tool subset instead of unsupported SystemVerilog features.",
+		checks: [
+			"Generated syntax is accepted by the configured simulator/linter.",
+			"Non-synthesizable constructs stay inside testbench files.",
+			"Fallback syntax is preferred over clever constructs when tool support is uncertain.",
+		],
+	},
+];
 
 export interface VerigenCodingAgentExtensionOptions {
 	autoMount?: boolean;
@@ -50,8 +207,11 @@ export interface VerigenWorkbenchExtensionCommand {
 
 export interface VerigenWorkbenchExtensionApi {
 	on(
-		event: "session_start" | "turn_end",
-		handler: (event: { type: "session_start" } | { type: "turn_end" }, ctx: ExtensionContext) => void | Promise<void>,
+		event: "session_start" | "turn_end" | "before_agent_start",
+		handler: (
+			event: VerigenExtensionEvent,
+			ctx: ExtensionContext,
+		) => VerigenExtensionHandlerResult | Promise<VerigenExtensionHandlerResult>,
 	): void;
 	registerCommand(name: string, options: VerigenWorkbenchExtensionCommand): void;
 	registerMessageRenderer<T = unknown>(customType: string, renderer: MessageRenderer<T>): void;
@@ -105,13 +265,151 @@ function verigenProviderConfig(env: NodeJS.ProcessEnv = process.env): ProviderCo
 	};
 }
 
-const verigenAsciiLogo = [
-	"__     _______ ____  ___ ____ _____ _   _",
-	"\\ \\   / / ____|  _ \\|_ _/ ___| ____| \\ | |",
-	" \\ \\ / /|  _| | |_) || | |  _|  _| |  \\| |",
-	"  \\ V / | |___|  _ < | | |_| | |___| |\\  |",
-	"   \\_/  |_____|_| \\_\\___\\____|_____|_| \\_|",
-];
+function tokenizeQuery(input: string): string[] {
+	return input
+		.toLowerCase()
+		.split(/[^a-z0-9_+-]+/)
+		.map((term) => term.trim())
+		.filter((term) => term.length > 1);
+}
+
+function parsePhaseArgs(args: string): { phase?: VerigenExpertPhase; query: string } {
+	const parts = args.trim().split(/\s+/).filter(Boolean);
+	const phaseToken = parts[0]?.toLowerCase();
+	if (!phaseToken) return { query: "" };
+	const phase = phaseAliases[phaseToken];
+	if (!phase) return { query: parts.join(" ") };
+	return { phase, query: parts.slice(1).join(" ") };
+}
+
+function scoreRule(rule: VerigenPlaybookRule, phase: VerigenExpertPhase | undefined, terms: string[]): number {
+	let score = phase && rule.phases.includes(phase) ? 3 : 0;
+	const searchable = `${rule.id} ${rule.summary} ${rule.triggers.join(" ")} ${rule.checks.join(" ")}`.toLowerCase();
+	for (const term of terms) {
+		if (rule.triggers.includes(term)) {
+			score += 3;
+		} else if (rule.id.includes(term)) {
+			score += 2;
+		} else if (searchable.includes(term)) {
+			score += 1;
+		}
+	}
+	return score;
+}
+
+function retrievePlaybookRules(
+	phase: VerigenExpertPhase | undefined,
+	query: string,
+	limit: number,
+): VerigenPlaybookRule[] {
+	const terms = tokenizeQuery(query);
+	const scored = playbookRules
+		.map((rule, index) => ({
+			rule,
+			index,
+			score: scoreRule(rule, phase, terms),
+		}))
+		.filter((entry) => entry.score > 0)
+		.sort((left, right) => right.score - left.score || left.index - right.index);
+	const selected = scored.length > 0 ? scored : playbookRules.map((rule, index) => ({ rule, index, score: 0 }));
+	return selected.slice(0, limit).map((entry) => entry.rule);
+}
+
+function renderRuleLines(rules: VerigenPlaybookRule[]): string[] {
+	const lines: string[] = [];
+	for (const rule of rules) {
+		lines.push(`- id: ${rule.id}`);
+		lines.push(`  apply: ${rule.summary}`);
+		lines.push(`  checks: ${rule.checks.join("; ")}`);
+	}
+	return lines;
+}
+
+function buildPhaseContextInjection(phase: VerigenExpertPhase, query: string): VerigenContextInjection {
+	const profile = phaseProfiles[phase];
+	const rules = retrievePlaybookRules(phase, query, 3);
+	const lines = [
+		"<verigen_phase_context>",
+		`phase: ${profile.name}`,
+		`task: ${query || "current conversation task"}`,
+		"phase_instructions:",
+		...profile.instructions.map((instruction) => `- ${instruction}`),
+		"selected_playbook_rules:",
+		...renderRuleLines(rules),
+		"context_policy:",
+		"- Use this block only for the current phase.",
+		"- Keep output concise and tie RTL changes to contract, KG, tool, trace, or rule evidence.",
+		"</verigen_phase_context>",
+	];
+	return {
+		content: lines.join("\n"),
+		ruleIds: rules.map((rule) => rule.id),
+	};
+}
+
+function buildRuleContextInjection(query: string): VerigenContextInjection {
+	const rules = retrievePlaybookRules(undefined, query, 4);
+	const lines = [
+		"<verigen_rule_context>",
+		`query: ${query}`,
+		"selected_playbook_rules:",
+		...renderRuleLines(rules),
+		"context_policy:",
+		"- Treat these rules as retrieved guidance for the current task, not as global standing instructions.",
+		"</verigen_rule_context>",
+	];
+	return {
+		content: lines.join("\n"),
+		ruleIds: rules.map((rule) => rule.id),
+	};
+}
+
+function hasAnyTerm(terms: Set<string>, candidates: string[]): boolean {
+	for (const candidate of candidates) {
+		if (terms.has(candidate)) return true;
+	}
+	return false;
+}
+
+function inferPhaseForPrompt(prompt: string): VerigenExpertPhase | undefined {
+	const trimmed = prompt.trim();
+	if (!trimmed || trimmed.startsWith("/")) return undefined;
+	const terms = new Set(tokenizeQuery(trimmed));
+	const isVerigenRelevant = hasAnyTerm(terms, [
+		"rtl",
+		"verilog",
+		"systemverilog",
+		"module",
+		"port",
+		"ports",
+		"fsm",
+		"width",
+		"waveform",
+		"vcd",
+		"testbench",
+		"dut",
+		"synth",
+		"iverilog",
+		"verilator",
+		"yosys",
+	]);
+	if (!isVerigenRelevant) return undefined;
+	if (
+		hasAnyTerm(terms, ["debug", "fix", "repair", "fail", "failure", "mismatch", "waveform", "vcd", "trace", "broken"])
+	) {
+		return "debugger";
+	}
+	if (hasAnyTerm(terms, ["verify", "test", "sim", "simulation", "lint", "synth", "formal", "run"])) {
+		return "verifier";
+	}
+	if (hasAnyTerm(terms, ["implement", "write", "generate", "code", "rtl", "module", "assign", "always_ff"])) {
+		return "coder";
+	}
+	if (hasAnyTerm(terms, ["plan", "spec", "contract", "interface", "ports", "requirements", "kg", "dag"])) {
+		return "planner";
+	}
+	return undefined;
+}
 
 function fitLine(line: string, width: number): string {
 	if (width <= 0) return "";
@@ -127,26 +425,23 @@ function centerLine(line: string, width: number): string {
 }
 
 function mutedHint(width: number): string {
-	if (width < 56) return "RTL, tests, traces, FPGA bring-up.";
-	return "Ask for RTL, testbenches, waveform debug, or FPGA bring-up.";
+	if (width < 56) return "RTL | tests | traces | FPGA";
+	return "RTL, testbench, waveform debug, and FPGA bring-up.";
 }
 
-function dashboardHint(width: number): string {
-	if (width < 56) return "/verigen-workbench show";
-	return "/verigen-workbench show opens the engineering dashboard.";
+function commandHint(width: number): string {
+	if (width < 56) return "/verigen-models | /verigen-workbench";
+	return "Setup: /verigen-models   Dashboard: /verigen-workbench show";
 }
 
 function renderVerigenStartupHeader(theme: Theme, width: number): string[] {
 	const columns = Math.max(1, width);
 	const compact = columns < 52;
-	const logoLines = compact ? ["VERIGEN"] : verigenAsciiLogo;
 	const title = compact ? "Verilog coding agent" : "Verilog-specialized coding agent";
 	return [
-		"",
-		...logoLines.map((line) => theme.fg("accent", centerLine(line, columns))),
-		theme.fg("muted", centerLine(title, columns)),
+		theme.fg("accent", centerLine(`VERIGEN  ${title}`, columns)),
 		theme.fg("dim", centerLine(mutedHint(columns), columns)),
-		theme.fg("dim", centerLine(dashboardHint(columns), columns)),
+		theme.fg("dim", centerLine(commandHint(columns), columns)),
 		"",
 	];
 }
@@ -176,20 +471,26 @@ function asDisposableComponent(component: Component): Component & { dispose?(): 
 	return component;
 }
 
-function mountWorkbench(ctx: ExtensionContext, options: VerigenCodingAgentExtensionOptions): boolean {
+function mountWorkbench(
+	ctx: ExtensionContext,
+	model: ProductWorkbenchModel,
+	options: VerigenCodingAgentExtensionOptions,
+	expanded: boolean,
+): boolean {
 	if (ctx.mode !== "tui") return false;
 	const resolved = extensionOptions(options);
 	ctx.ui.setWidget(
 		resolved.widgetKey,
 		() =>
 			asDisposableComponent(
-				createProductWorkbenchPiTuiComponent(productWorkbenchModel(options), {
+				createProductWorkbenchStatusPanelPiTuiComponent(model, {
+					expanded,
 					height: resolved.height,
 				}),
 			),
 		{ placement: resolved.widgetPlacement },
 	);
-	ctx.ui.setStatus(resolved.statusKey, "VeriGen S15 workbench");
+	ctx.ui.setStatus(resolved.statusKey, statusText(model));
 	return true;
 }
 
@@ -200,7 +501,28 @@ function clearWorkbench(ctx: ExtensionContext, options: VerigenCodingAgentExtens
 }
 
 function commandUsage(ctx: ExtensionCommandContext): void {
-	ctx.ui.notify("Usage: /verigen-workbench show|hide|toggle|snapshot", "info");
+	ctx.ui.notify(
+		"Usage: /verigen-workbench show|details|summary|hide|toggle|snapshot (open and close also work)",
+		"info",
+	);
+}
+
+function phaseCommandUsage(ctx: ExtensionCommandContext): void {
+	ctx.ui.notify("Usage: /verigen-phase planner|coder|verifier|debugger [task]", "info");
+}
+
+function rulesCommandUsage(ctx: ExtensionCommandContext): void {
+	ctx.ui.notify("Usage: /verigen-rules <query>", "info");
+}
+
+function modelSetupNotice(): string {
+	return "No VeriGen model is ready. Run /verigen-models or set VERIGEN_TEST_LLM_API_KEY.";
+}
+
+function statusText(model: ProductWorkbenchModel): string {
+	if (model.status === "ready") return "VeriGen ready";
+	if (model.status === "blocked") return "VeriGen blocked";
+	return "VeriGen setup";
 }
 
 function modelSetupGuide(env: NodeJS.ProcessEnv = process.env): string {
@@ -208,11 +530,11 @@ function modelSetupGuide(env: NodeJS.ProcessEnv = process.env): string {
 	const baseUrl = env.VERIGEN_TEST_LLM_BASE_URL?.trim() || VERIGEN_DEFAULT_BASE_URL;
 	return [
 		"VeriGen model setup",
-		`Default model: ${VERIGEN_KIMI_PROVIDER_ID}/${modelId}`,
+		`Model: ${VERIGEN_KIMI_PROVIDER_ID}/${modelId}`,
 		`Endpoint: ${baseUrl}`,
-		"Interactive setup: run /login, choose Use an API key, select VeriGen Kimi, then paste the API key.",
-		"Environment setup: set VERIGEN_TEST_LLM_API_KEY before starting verigen.",
-		"Optional overrides: VERIGEN_TEST_LLM_BASE_URL and VERIGEN_TEST_LLM_MODEL.",
+		"Interactive: /login -> Use an API key -> VeriGen Kimi.",
+		"Environment: set VERIGEN_TEST_LLM_API_KEY before starting verigen.",
+		"Optional: VERIGEN_TEST_LLM_BASE_URL and VERIGEN_TEST_LLM_MODEL.",
 	].join("\n");
 }
 
@@ -221,6 +543,8 @@ export function installVerigenCodingAgentExtension(
 	options: VerigenCodingAgentExtensionOptions = {},
 ): void {
 	let visible = extensionOptions(options).autoMount;
+	let expanded = false;
+	const currentModel = productWorkbenchModel(options);
 	pi.registerProvider(VERIGEN_KIMI_PROVIDER_ID, verigenProviderConfig(extensionOptions(options).env));
 
 	pi.registerTool(createGraphifyStatusToolDefinition());
@@ -231,8 +555,103 @@ export function installVerigenCodingAgentExtension(
 
 	pi.registerMessageRenderer<ProductWorkbenchModel>(VERIGEN_WORKBENCH_CUSTOM_TYPE, (message) => {
 		const model = isProductWorkbenchModel(message.details) ? message.details : productWorkbenchModel(options);
-		return createProductWorkbenchPiTuiComponent(model, { height: extensionOptions(options).height });
+		return createProductWorkbenchStatusPanelPiTuiComponent(model, {
+			expanded: true,
+			height: extensionOptions(options).height,
+		});
 	});
+
+	pi.registerCommand("verigen-phase", {
+		description: "Inject a VeriGen phase prompt and relevant playbook rules for the current task",
+		handler: async (args, ctx) => {
+			const parsed = parsePhaseArgs(args);
+			if (!parsed.phase) {
+				phaseCommandUsage(ctx);
+				return;
+			}
+			const injection = buildPhaseContextInjection(parsed.phase, parsed.query);
+			pi.sendMessage<VerigenPhaseContextDetails>(
+				{
+					customType: VERIGEN_PHASE_CONTEXT_CUSTOM_TYPE,
+					content: injection.content,
+					display: false,
+					details: {
+						phase: parsed.phase,
+						query: parsed.query,
+						ruleIds: injection.ruleIds,
+					},
+				},
+				{ triggerTurn: true, deliverAs: "steer" },
+			);
+			ctx.ui.notify(
+				`Injected VeriGen ${parsed.phase} context with ${injection.ruleIds.length} playbook rules.`,
+				"info",
+			);
+		},
+	});
+
+	pi.registerCommand("verigen-rules", {
+		description: "Retrieve and inject relevant VeriGen playbook rules",
+		handler: async (args, ctx) => {
+			const query = args.trim();
+			if (!query) {
+				rulesCommandUsage(ctx);
+				return;
+			}
+			const injection = buildRuleContextInjection(query);
+			pi.sendMessage<VerigenRuleContextDetails>(
+				{
+					customType: VERIGEN_RULE_CONTEXT_CUSTOM_TYPE,
+					content: injection.content,
+					display: false,
+					details: {
+						query,
+						ruleIds: injection.ruleIds,
+					},
+				},
+				{ triggerTurn: true, deliverAs: "steer" },
+			);
+			ctx.ui.notify(`Injected ${injection.ruleIds.length} VeriGen playbook rules.`, "info");
+		},
+	});
+
+	pi.on("before_agent_start", (event) => {
+		if (event.type !== "before_agent_start") return undefined;
+		const phase = inferPhaseForPrompt(event.prompt);
+		if (!phase) return undefined;
+		const injection = buildPhaseContextInjection(phase, event.prompt);
+		return {
+			message: {
+				customType: VERIGEN_PHASE_CONTEXT_CUSTOM_TYPE,
+				content: injection.content,
+				display: false,
+				details: {
+					phase,
+					query: event.prompt,
+					ruleIds: injection.ruleIds,
+				} satisfies VerigenPhaseContextDetails,
+			},
+		};
+	});
+
+	const hideWorkbench = (ctx: ExtensionContext): void => {
+		visible = false;
+		clearWorkbench(ctx, options);
+		ctx.ui.notify("VeriGen status panel hidden.", "info");
+	};
+
+	const mountVisibleWorkbench = (ctx: ExtensionContext, notify: boolean): boolean => {
+		const mounted = mountWorkbench(ctx, currentModel, options, expanded);
+		if (!mounted) {
+			ctx.ui.notify("VeriGen status panel is only available in TUI mode", "warning");
+			return false;
+		}
+		if (notify) {
+			const mode = expanded ? "details" : "summary";
+			ctx.ui.notify(`VeriGen status panel open (${mode}). Use /verigen-workbench hide to close it.`, "info");
+		}
+		return true;
+	};
 
 	pi.on("session_start", (_event, ctx) => {
 		if (ctx.mode === "tui" && extensionOptions(options).showHeader) {
@@ -242,39 +661,57 @@ export function installVerigenCodingAgentExtension(
 			}));
 		}
 		if (ctx.mode === "tui" && ctx.modelRegistry.getAvailable().length === 0) {
-			ctx.ui.notify(modelSetupGuide(extensionOptions(options).env), "warning");
+			ctx.ui.notify(modelSetupNotice(), "warning");
+			if (!visible) {
+				visible = true;
+				expanded = false;
+			}
 		}
-		if (!visible) return;
-		mountWorkbench(ctx, options);
+		if (!visible) return undefined;
+		mountVisibleWorkbench(ctx, false);
+		return undefined;
 	});
 
 	pi.on("turn_end", (_event, ctx) => {
-		if (!visible) return;
-		mountWorkbench(ctx, options);
+		if (!visible) return undefined;
+		mountVisibleWorkbench(ctx, false);
+		return undefined;
 	});
 
 	pi.registerCommand("verigen-workbench", {
 		description: "Show, hide, or snapshot the VeriGen S15 product workbench",
 		handler: async (args, ctx) => {
-			const action = args.trim() || "toggle";
+			const rawAction = args.trim() || "toggle";
+			const action = rawAction === "open" ? "show" : rawAction === "close" ? "hide" : rawAction;
 			if (action === "show") {
 				visible = true;
-				if (!mountWorkbench(ctx, options))
-					ctx.ui.notify("VeriGen workbench is only available in TUI mode", "warning");
+				expanded = false;
+				mountVisibleWorkbench(ctx, true);
+				return;
+			}
+			if (action === "details" || action === "expand") {
+				visible = true;
+				expanded = true;
+				mountVisibleWorkbench(ctx, true);
+				return;
+			}
+			if (action === "summary" || action === "collapse") {
+				visible = true;
+				expanded = false;
+				mountVisibleWorkbench(ctx, true);
 				return;
 			}
 			if (action === "hide") {
-				visible = false;
-				clearWorkbench(ctx, options);
+				hideWorkbench(ctx);
 				return;
 			}
 			if (action === "toggle") {
 				visible = !visible;
 				if (visible) {
-					if (!mountWorkbench(ctx, options))
-						ctx.ui.notify("VeriGen workbench is only available in TUI mode", "warning");
+					expanded = false;
+					mountVisibleWorkbench(ctx, true);
 				} else {
-					clearWorkbench(ctx, options);
+					hideWorkbench(ctx);
 				}
 				return;
 			}
@@ -284,10 +721,11 @@ export function installVerigenCodingAgentExtension(
 						customType: VERIGEN_WORKBENCH_CUSTOM_TYPE,
 						content: "VeriGen S15 product workbench snapshot.",
 						display: true,
-						details: productWorkbenchModel(options),
+						details: currentModel,
 					},
 					{ triggerTurn: false },
 				);
+				ctx.ui.notify("Workbench snapshot added to the conversation.", "info");
 				return;
 			}
 			commandUsage(ctx);

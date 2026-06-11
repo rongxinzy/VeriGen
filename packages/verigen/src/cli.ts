@@ -78,7 +78,7 @@ Commands:
   release-smoke    Print S11 release smoke checklist and quickstart
   eval-suite       Run S12 evaluation suite
   product-preview  Render S13-S15 product workbench preview/report
-  product-workbench Launch the interactive S15 product workbench TUI
+  product-workbench Launch the dogfood/debug product workbench TUI
   product-template  Scaffold a S15 product template project
   graphify-status  Print the default Graphify index status for the current repo
   graphify-query   Search the Graphify index
@@ -302,6 +302,8 @@ async function runAgent(args: string[]): Promise<number> {
 			console.log(`system prompt: ${launch.assets.systemPrompt}`);
 			console.log(`prompt templates: ${launch.assets.promptTemplates.length}`);
 			console.log(`skills: ${launch.assets.skills.length}`);
+			console.log(`phase prompts: ${launch.assets.phasePrompts.length}`);
+			console.log(`rule packs: ${launch.assets.rulePacks.length}`);
 			console.log(`extensions: ${launch.assets.extensions.length}`);
 		}
 		return 0;

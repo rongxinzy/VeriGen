@@ -32,6 +32,8 @@ import {
 	splitProductWorkbenchInput,
 	VERIGEN_DEFAULT_MODEL_ID,
 	VERIGEN_KIMI_PROVIDER_ID,
+	VERIGEN_PHASE_CONTEXT_CUSTOM_TYPE,
+	VERIGEN_RULE_CONTEXT_CUSTOM_TYPE,
 	VERIGEN_WORKBENCH_CUSTOM_TYPE,
 	type VerigenWorkbenchExtensionApi,
 	type VerigenWorkbenchExtensionCommand,
@@ -40,6 +42,8 @@ import {
 } from "../src/index.ts";
 
 type WidgetComponent = {
+	getModel?: () => unknown;
+	handleInput?: (input: string) => void;
 	render(width: number): string[];
 };
 
@@ -47,6 +51,22 @@ type WidgetFactory = () => WidgetComponent;
 
 function isWidgetFactory(value: unknown): value is WidgetFactory {
 	return typeof value === "function";
+}
+
+function hasCustomMessageResult(value: unknown): value is {
+	message: { customType: string; content: string; display: boolean };
+} {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	const candidate = value as { message?: unknown };
+	if (typeof candidate.message !== "object" || candidate.message === null || Array.isArray(candidate.message)) {
+		return false;
+	}
+	const message = candidate.message as { customType?: unknown; content?: unknown; display?: unknown };
+	return (
+		typeof message.customType === "string" &&
+		typeof message.content === "string" &&
+		typeof message.display === "boolean"
+	);
 }
 
 function writeText(filePath: string, content: string): void {
@@ -337,6 +357,11 @@ describe("S11-S15 productization layer", () => {
 		assert.match(rendered, /Task Log \/ Replay/);
 		assert.match(rendered, /Inspector/);
 		assert.match(rendered, /Keys/);
+		assert.match(rendered, /q quit/);
+		assert.match(rendered, /setup needed/);
+		assert.match(rendered, /Focus inspector/);
+		assert.match(rendered, /Tab Trace Report/);
+		assert.doesNotMatch(rendered, /needs_setup|focus=right|trace-report/);
 		assert.ok(lines.every((line) => line.length <= 112));
 	});
 
@@ -351,6 +376,9 @@ describe("S11-S15 productization layer", () => {
 
 		assert.match(medium, /Inspector \/ Replay/);
 		assert.match(narrow, /Inspector/);
+		assert.match(narrow, /Trace Report/);
+		assert.match(narrow, /q quit/);
+		assert.doesNotMatch(narrow, /\.\.\./);
 		assert.ok(mediumLines.every((line) => line.length <= 72));
 		assert.ok(narrowLines.every((line) => line.length <= 48));
 		assert.ok(mediumLines.length <= 24);
@@ -435,6 +463,54 @@ describe("S11-S15 productization layer", () => {
 		assert.match(mount.component.render(72).join("\n"), /Waveform/);
 	});
 
+	test("does not auto-mount the agent status panel when a model is available", async () => {
+		type WorkbenchHandler = Parameters<VerigenWorkbenchExtensionApi["on"]>[1];
+		const handlers = new Map<string, WorkbenchHandler>();
+		let widgetMounted = false;
+		let statusText: string | undefined;
+		let notification = "";
+		const api: VerigenWorkbenchExtensionApi = {
+			on: (event, handler) => {
+				handlers.set(event, handler);
+			},
+			registerCommand: () => {},
+			registerMessageRenderer: () => {},
+			registerProvider: () => {},
+			registerTool: () => {},
+			sendMessage: () => {},
+		};
+		const fakeContext = {
+			mode: "tui",
+			ui: {
+				setWidget: (_key: string, content: unknown) => {
+					widgetMounted = content !== undefined;
+				},
+				setStatus: (_key: string, text: string | undefined) => {
+					statusText = text;
+				},
+				setHeader: () => {},
+				notify: (message: string) => {
+					notification = message;
+				},
+			},
+			modelRegistry: {
+				getAvailable: () => [{ id: VERIGEN_DEFAULT_MODEL_ID, provider: VERIGEN_KIMI_PROVIDER_ID }],
+			},
+		};
+
+		installVerigenCodingAgentExtension(api, {
+			height: 24,
+			now: "2026-06-09T00:00:00.000Z",
+		});
+		const startHandler = handlers.get("session_start");
+		assert.ok(startHandler);
+		await startHandler({ type: "session_start" }, fakeContext as unknown as ExtensionContext);
+
+		assert.equal(widgetMounted, false);
+		assert.equal(statusText, undefined);
+		assert.equal(notification, "");
+	});
+
 	test("registers a coding-agent extension that mounts the workbench widget on command", async () => {
 		type WorkbenchHandler = Parameters<VerigenWorkbenchExtensionApi["on"]>[1];
 		const handlers = new Map<string, WorkbenchHandler>();
@@ -445,9 +521,16 @@ describe("S11-S15 productization layer", () => {
 		let renderedHeader = "";
 		let widgetKey: string | undefined;
 		let widgetPlacement: string | undefined;
+		let widgetMounted = false;
+		let mountedWidget: WidgetComponent | undefined;
 		let renderedWidget = "";
 		let statusText: string | undefined;
-		let sentCustomType: string | undefined;
+		const sentMessages: Array<{
+			customType: string;
+			content: string;
+			display: boolean;
+			options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" };
+		}> = [];
 		let notification = "";
 		const api: VerigenWorkbenchExtensionApi = {
 			on: (event, handler) => {
@@ -464,8 +547,13 @@ describe("S11-S15 productization layer", () => {
 				providerModel = config.models?.[0]?.id;
 			},
 			registerTool: () => {},
-			sendMessage: (message) => {
-				sentCustomType = message.customType;
+			sendMessage: (message, options) => {
+				sentMessages.push({
+					customType: message.customType,
+					content: message.content,
+					display: message.display,
+					options,
+				});
 			},
 		};
 		const fakeContext = {
@@ -475,7 +563,13 @@ describe("S11-S15 productization layer", () => {
 					widgetKey = key;
 					widgetPlacement = options?.placement;
 					if (isWidgetFactory(content)) {
-						renderedWidget = content().render(72).join("\n");
+						mountedWidget = content();
+						widgetMounted = true;
+						renderedWidget = mountedWidget.render(72).join("\n");
+					} else {
+						mountedWidget = undefined;
+						widgetMounted = false;
+						renderedWidget = "";
 					}
 				},
 				setStatus: (_key: string, text: string | undefined) => {
@@ -509,27 +603,113 @@ describe("S11-S15 productization layer", () => {
 		assert.equal(rendererType, VERIGEN_WORKBENCH_CUSTOM_TYPE);
 		const command = commands.get("verigen-workbench");
 		const modelsCommand = commands.get("verigen-models");
+		const phaseCommand = commands.get("verigen-phase");
+		const rulesCommand = commands.get("verigen-rules");
 		assert.ok(command);
 		assert.ok(modelsCommand);
+		assert.ok(phaseCommand);
+		assert.ok(rulesCommand);
 
 		const startHandler = handlers.get("session_start");
 		assert.ok(startHandler);
 		await startHandler({ type: "session_start" }, fakeContext as unknown as ExtensionContext);
 		assert.match(renderedHeader, /VERIGEN|_____/);
 		assert.match(renderedHeader, /Verilog-specialized coding agent/);
-		assert.match(notification, /\/login/);
-		assert.match(notification, /VeriGen Kimi/);
-		assert.equal(widgetKey, undefined);
-		assert.equal(statusText, undefined);
+		assert.match(notification, /\/verigen-models/);
+		assert.match(notification, /VERIGEN_TEST_LLM_API_KEY/);
+		assert.equal(widgetKey, "verigen-product-workbench");
+		assert.equal(statusText, "VeriGen setup");
+		assert.equal(widgetMounted, true);
+		assert.match(renderedWidget, /VeriGen Status/);
+		assert.match(renderedWidget, /Model:/);
+		assert.match(renderedWidget, /Python\/uv:/);
+		assert.match(renderedWidget, /Task:/);
+		assert.match(renderedWidget, /Issue:/);
+		assert.match(renderedWidget, /Next: \/verigen-models/);
+		assert.match(renderedWidget, /\/verigen-workbench details/);
+		assert.doesNotMatch(renderedWidget, /Inspector \/ Replay|Keys/);
 
 		await command.handler("show", fakeContext as unknown as ExtensionCommandContext);
 		assert.equal(widgetKey, "verigen-product-workbench");
 		assert.equal(widgetPlacement, "belowEditor");
-		assert.equal(statusText, "VeriGen S15 workbench");
-		assert.match(renderedWidget, /Inspector \/ Replay/);
+		assert.equal(statusText, "VeriGen setup");
+		assert.match(renderedWidget, /VeriGen Status/);
+		assert.doesNotMatch(renderedWidget, /Logs|Replay|Board|Report/);
+		assert.equal(mountedWidget?.handleInput, undefined);
+		assert.match(notification, /status panel open \(summary\)/);
+
+		await command.handler("close", fakeContext as unknown as ExtensionCommandContext);
+		assert.equal(statusText, undefined);
+		assert.equal(widgetMounted, false);
+		assert.match(notification, /status panel hidden/);
+
+		await command.handler("open", fakeContext as unknown as ExtensionCommandContext);
+		assert.equal(statusText, "VeriGen setup");
+		assert.equal(widgetMounted, true);
+		assert.match(notification, /status panel open \(summary\)/);
+
+		await command.handler("details", fakeContext as unknown as ExtensionCommandContext);
+		assert.equal(statusText, "VeriGen setup");
+		assert.match(renderedWidget, /VeriGen Status Details/);
+		assert.match(renderedWidget, /Logs/);
+		assert.match(renderedWidget, /Replay/);
+		assert.match(renderedWidget, /Board/);
+		assert.match(renderedWidget, /Report/);
+		assert.match(notification, /status panel open \(details\)/);
 
 		await command.handler("snapshot", fakeContext as unknown as ExtensionCommandContext);
-		assert.equal(sentCustomType, VERIGEN_WORKBENCH_CUSTOM_TYPE);
+		assert.equal(sentMessages.at(-1)?.customType, VERIGEN_WORKBENCH_CUSTOM_TYPE);
+		assert.match(notification, /snapshot/);
+
+		await phaseCommand.handler("debugger waveform mismatch", fakeContext as unknown as ExtensionCommandContext);
+		const phaseMessage = sentMessages.at(-1);
+		assert.equal(phaseMessage?.customType, VERIGEN_PHASE_CONTEXT_CUSTOM_TYPE);
+		assert.equal(phaseMessage?.display, false);
+		assert.equal(phaseMessage?.options?.triggerTurn, true);
+		assert.equal(phaseMessage?.options?.deliverAs, "steer");
+		assert.match(phaseMessage?.content ?? "", /phase: debugger/);
+		assert.match(phaseMessage?.content ?? "", /tb-mismatch-wave-trace/);
+		assert.match(notification, /Injected VeriGen debugger context/);
+
+		await rulesCommand.handler("width cast", fakeContext as unknown as ExtensionCommandContext);
+		const rulesMessage = sentMessages.at(-1);
+		assert.equal(rulesMessage?.customType, VERIGEN_RULE_CONTEXT_CUSTOM_TYPE);
+		assert.equal(rulesMessage?.display, false);
+		assert.equal(rulesMessage?.options?.triggerTurn, true);
+		assert.match(rulesMessage?.content ?? "", /width-explicit-casts/);
+		assert.match(notification, /playbook rules/);
+
+		const beforeAgentStartHandler = handlers.get("before_agent_start");
+		assert.ok(beforeAgentStartHandler);
+		const autoInjection = await beforeAgentStartHandler(
+			{ type: "before_agent_start", prompt: "fix the RTL waveform mismatch on out" },
+			fakeContext as unknown as ExtensionContext,
+		);
+		assert.ok(hasCustomMessageResult(autoInjection));
+		assert.equal(autoInjection.message.customType, VERIGEN_PHASE_CONTEXT_CUSTOM_TYPE);
+		assert.equal(autoInjection.message.display, false);
+		assert.match(autoInjection.message.content, /phase: debugger/);
+		assert.match(autoInjection.message.content, /tb-mismatch-wave-trace/);
+
+		const setupInjection = await beforeAgentStartHandler(
+			{ type: "before_agent_start", prompt: "show me model setup" },
+			fakeContext as unknown as ExtensionContext,
+		);
+		assert.equal(setupInjection, undefined);
+
+		const turnEndHandler = handlers.get("turn_end");
+		assert.ok(turnEndHandler);
+		await turnEndHandler({ type: "turn_end" }, fakeContext as unknown as ExtensionContext);
+		assert.match(renderedWidget, /VeriGen Status Details/);
+
+		await command.handler("summary", fakeContext as unknown as ExtensionCommandContext);
+		assert.match(renderedWidget, /VeriGen Status/);
+		assert.doesNotMatch(renderedWidget, /Logs/);
+
+		await command.handler("hide", fakeContext as unknown as ExtensionCommandContext);
+		assert.equal(widgetMounted, false);
+		await turnEndHandler({ type: "turn_end" }, fakeContext as unknown as ExtensionContext);
+		assert.equal(widgetMounted, false);
 
 		notification = "";
 		await modelsCommand.handler("", fakeContext as unknown as ExtensionCommandContext);

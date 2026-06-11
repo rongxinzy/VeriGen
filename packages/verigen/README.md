@@ -2,7 +2,7 @@
 
 `verigen` 是 VeriGen 的 TypeScript 垂直能力包，用于把 Verilog RTL 生成、验证、调试所需的结构化能力接入 VeriGen agent runtime。
 
-它不是完整的 FPGA IDE，也不是单纯的 Verilog 代码补全工具。当前包提供到 S15 MVP：CLI、Graphify 仓库上下文导航、Spec KG、Playbook RAG、随 npm 包分发的 Python Verilog analysis worker、VeriGen mode/TUI preview、Codegen Quality Probe、EDA ToolRunner、初版四 Agent 修复闭环、统一 Context Router、mock board profile/bring-up、dry-run hardware flow、release smoke、evaluation suite 和 product workbench preview。
+它不是完整的 FPGA IDE，也不是单纯的 Verilog 代码补全工具。当前包提供到 S15 MVP：CLI、Graphify 仓库上下文导航、Spec KG、Playbook RAG、随 npm 包分发的 Python Verilog analysis worker、VeriGen mode/TUI preview、Codegen Quality Probe、EDA ToolRunner、初版四 Agent 修复闭环、统一 Context Router、mock board profile/bring-up、dry-run hardware flow、release smoke、evaluation suite、按需 phase/rule 注入和 product workbench preview。
 
 ## 能力范围
 
@@ -106,7 +106,9 @@ verigen worker-smoke --json
 
 S5 新增的是可被后续正式 TUI 消费的垂直入口：
 
-- `verigen agent`：加载 VeriGen system prompt、prompt templates 和 playbook skill 后委托给原 pi coding-agent，保留对话流和工具调用能力。
+- `verigen agent`：加载极简 VeriGen system prompt 和 extension 后委托给原 pi coding-agent，保留对话流和工具调用能力。
+- `/verigen-phase planner|coder|verifier|debugger [task]`：在 TUI 内按需注入 phase 指令和命中的 Playbook 规则。
+- `/verigen-rules <query>`：在 TUI 内只检索并注入相关 Playbook 规则。
 - `verigen mode`：输出 VeriGen profile 和 `spec -> plan -> rtl -> sim -> trace -> fix -> report` 阶段。
 - `verigen trace-demo`：生成固定失败 RTL/VCD，调用 `traceSimulationFailure`，输出文本版 trace panel。
 - `verigen trace-panel`：对用户提供的 RTL/VCD 输出同样的 trace panel。
@@ -132,6 +134,10 @@ VERIGEN_TEST_LLM_API_KEY=<local-secret>
 ```
 
 TUI 内可运行 `/verigen-models` 查看当前默认 endpoint、模型名和配置步骤。
+
+`verigen agent` 默认加载 VeriGen extension，但不默认展示完整 workbench，避免破坏 pi 原有输入框和 `/` 指令引用手感。无可用模型等关键状态会自动显示只读状态面板；也可以手动运行 `/verigen-workbench show` 打开状态面板，或运行 `/verigen-workbench details` 展开 logs、replay、board 和 report 摘要。
+
+Planner/Coder/Verifier/Debugger prompt 和 Playbook 规则不再作为启动时常驻上下文注入；extension 会对明显的 RTL/Verilog 任务自动注入一个小型 phase/rule 上下文，也可以用 `/verigen-phase ...` 或 `/verigen-rules ...` 显式拉取本轮所需的上下文。
 
 ## S6 EDA ToolRunner
 
@@ -233,7 +239,7 @@ verigen eval-suite --suite smoke --json
 verigen product-preview --with-smoke
 verigen product-preview --with-smoke --tui
 verigen product-preview --interactive
-verigen product-workbench
+verigen product-workbench  # 内部 dogfood/debug dashboard
 verigen product-preview --provider-page
 verigen product-preview --profiles
 verigen product-template --id uart_loopback --output ./examples/uart_loopback
@@ -243,9 +249,9 @@ verigen product-preview --with-smoke --report
 verigen product-preview --report --output ./verigen-product-report.md
 ```
 
-`release-smoke --verify-local` 会检查 npm package manifest、`verigen` bin、`files` whitelist、prepack hook、pi coding-agent/pi-tui 依赖、`./coding-agent-extension` 子路径导出、S15 workbench extension 入口、`verigen agent` 默认 extension 加载、Python worker 源码、vendored pyverilog fork，以及不要求 Docker 的安装边界。`release-smoke --verify-dist` 会检查已 build 的 `dist` 包面：CLI/API 入口、coding-agent extension、agent extension wiring、Python worker、vendored pyverilog、VeriGen prompt assets 和 skill assets。`release-smoke --pack-install-plan` 只输出真实 pack/install smoke 的命令清单，不运行 build、pack、install 或 publish，也不处理 npm 认证。真正 pack/install smoke 仍需发布前显式执行。
+`release-smoke --verify-local` 会检查 npm package manifest、`verigen` bin、`files` whitelist、prepack hook、pi coding-agent/pi-tui 依赖、`./coding-agent-extension` 子路径导出、S15 workbench extension 入口、`verigen agent` 默认 extension 加载、Python worker 源码、vendored pyverilog fork，以及不要求 Docker 的安装边界。`release-smoke --verify-dist` 会检查已 build 的 `dist` 包面：CLI/API 入口、coding-agent extension、agent extension wiring、Python worker、vendored pyverilog、VeriGen on-demand prompt assets 和 rule assets。`release-smoke --pack-install-plan` 只输出真实 pack/install smoke 的命令清单，不运行 build、pack、install 或 publish，也不处理 npm 认证。真正 pack/install smoke 仍需发布前显式执行。
 
-当前 product workbench 是响应式终端 TUI preview/model，并提供 `product-workbench` 轻量交互入口。它在宽屏渲染三栏，在中等宽度渲染双栏，在窄终端堆叠关键面板；包含 pipeline navigator、task log/session replay、inspector tabs、keybindings、焦点状态、inspector 切换、density toggle、layout 序列化/恢复、provider config page、board profile management、doctor repair suggestions、project template scaffold 和 report export。`verigen agent` 默认传入内置 workbench extension；`createProductWorkbenchPiTuiMount()` 暴露了 `@earendil-works/pi-tui` Component 适配契约；`verigen/coding-agent-extension` 和 `installVerigenCodingAgentExtension()` 会在 coding-agent `session_start`/`turn_end` 时把 workbench 挂到 editor 下方，并注册 `/verigen-workbench show|hide|toggle|snapshot`。`product-preview --report --output <path>` 会生成可分享 Markdown artifact，包含 onboarding、provider、layout、inspector snapshot、keybindings、release smoke 和 session replay。离线 TUI dogfood 已验证首屏能加载 extension 并渲染 workbench；后续继续视觉 polish。
+当前 product workbench 是响应式终端 TUI preview/model，并保留 `product-workbench` 作为内部 dogfood/debug 入口。它在宽屏渲染三栏，在中等宽度渲染双栏，在窄终端堆叠关键面板；包含 pipeline navigator、task log/session replay、inspector tabs、keybindings、焦点状态、inspector 切换、density toggle、layout 序列化/恢复、provider config page、board profile management、doctor repair suggestions、project template scaffold 和 report export。`verigen agent` 默认传入内置 extension，但不会默认展示完整 workbench；extension 只在关键状态或 `/verigen-workbench show` 时把只读 VeriGen 状态面板挂到 editor 下方，默认显示模型状态、Python/uv 状态、当前任务、最近问题和下一步命令，`/verigen-workbench details` 再展开 logs、replay、board 和 report 摘要。`createProductWorkbenchPiTuiMount()` 暴露了完整 dogfood dashboard 的 `@earendil-works/pi-tui` Component 适配契约；`verigen/coding-agent-extension` 和 `installVerigenCodingAgentExtension()` 注册 `/verigen-workbench show|details|summary|hide|toggle|snapshot`。`product-preview --report --output <path>` 会生成可分享 Markdown artifact，包含 onboarding、provider、layout、inspector snapshot、keybindings、release smoke 和 session replay。离线 TUI dogfood 已验证首屏能加载 extension 并按需渲染状态面板。
 
 ## Python Worker 分发方式
 

@@ -192,7 +192,7 @@ describe("S5 VeriGen agent launcher", () => {
 		}
 	});
 
-	test("builds a pi coding-agent launch command with VeriGen prompts and skill assets", () => {
+	test("builds a pi coding-agent launch command with minimal resident context and on-demand assets", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "verigen-s5-agent-"));
 		tempDirs.push(tempDir);
 		const promptDir = join(tempDir, "dist", "pi-assets", "prompts");
@@ -218,14 +218,18 @@ describe("S5 VeriGen agent launcher", () => {
 
 		assert.equal(launch.command, "pi-test");
 		assert.equal(launch.assets.systemPrompt, join(promptDir, "verigen-system.md"));
-		assert.equal(launch.assets.promptTemplates.length, 4);
-		assert.equal(launch.assets.skills.length, 1);
+		assert.equal(launch.assets.promptTemplates.length, 0);
+		assert.equal(launch.assets.skills.length, 0);
+		assert.equal(launch.assets.phasePrompts.length, 4);
+		assert.equal(launch.assets.rulePacks.length, 1);
 		assert.deepEqual(launch.assets.extensions, [join(tempDir, "dist", "verigen-coding-agent-extension.js")]);
 		assert.deepEqual(launch.args.slice(0, 2), ["--system-prompt", join(promptDir, "verigen-system.md")]);
-		assert.ok(launch.args.includes("--prompt-template"));
-		assert.ok(launch.args.includes(join(promptDir, "verigen-coder.md")));
-		assert.ok(launch.args.includes("--skill"));
-		assert.ok(launch.args.includes(join(skillDir, "verigen-playbook.md")));
+		assert.ok(!launch.args.includes("--prompt-template"));
+		assert.ok(!launch.args.includes(join(promptDir, "verigen-coder.md")));
+		assert.ok(!launch.args.includes("--skill"));
+		assert.ok(!launch.args.includes(join(skillDir, "verigen-playbook.md")));
+		assert.ok(launch.assets.phasePrompts.includes(join(promptDir, "verigen-coder.md")));
+		assert.ok(launch.assets.rulePacks.includes(join(skillDir, "verigen-playbook.md")));
 		assert.ok(launch.args.includes("--extension"));
 		assert.ok(launch.args.includes(join(tempDir, "dist", "verigen-coding-agent-extension.js")));
 		assert.deepEqual(launch.args.slice(-2), ["--print", "generate a counter"]);
@@ -311,10 +315,12 @@ describe("S5 VeriGen agent launcher", () => {
 		assert.equal(launch.command, join(tempDir, "pi-test.sh"));
 		assert.ok(launch.args.includes("--extension"));
 		assert.ok(launch.args.includes(join(packageRoot, "src", "verigen-coding-agent-extension.ts")));
-		assert.ok(launch.args.includes("--prompt-template"));
-		assert.ok(launch.args.includes(join(promptDir, "verigen-coder.md")));
-		assert.ok(launch.args.includes("--skill"));
-		assert.ok(launch.args.includes(join(skillDir, "verigen-playbook.md")));
+		assert.ok(!launch.args.includes("--prompt-template"));
+		assert.ok(!launch.args.includes(join(promptDir, "verigen-coder.md")));
+		assert.ok(!launch.args.includes("--skill"));
+		assert.ok(!launch.args.includes(join(skillDir, "verigen-playbook.md")));
+		assert.ok(launch.assets.phasePrompts.includes(join(promptDir, "verigen-coder.md")));
+		assert.ok(launch.assets.rulePacks.includes(join(skillDir, "verigen-playbook.md")));
 	});
 
 	test("uses the installed pi coding-agent dist CLI instead of falling back to PATH", () => {

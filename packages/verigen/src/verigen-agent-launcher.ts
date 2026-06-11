@@ -12,6 +12,8 @@ export interface VerigenAgentAssets {
 	systemPrompt: string;
 	promptTemplates: string[];
 	skills: string[];
+	phasePrompts: string[];
+	rulePacks: string[];
 	extensions: string[];
 }
 
@@ -129,10 +131,12 @@ export function findVerigenAgentAssets(packageRoot = defaultPackageRoot()): Veri
 	}
 	return {
 		systemPrompt,
-		promptTemplates: markdownFiles(promptDir, "verigen-").filter(
+		promptTemplates: [],
+		skills: [],
+		phasePrompts: markdownFiles(promptDir, "verigen-").filter(
 			(filePath) => basename(filePath) !== "verigen-system.md",
 		),
-		skills: markdownFiles(skillDir, "verigen-"),
+		rulePacks: markdownFiles(skillDir, "verigen-"),
 		extensions: extension ? [extension] : [],
 	};
 }

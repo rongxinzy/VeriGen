@@ -32,14 +32,14 @@ VeriGen 面向 RTL 设计-验证-修复流水线：
 - **结构化中间物**：规格、KG、trace、修复建议都要机器可读。
 - **KG 锚定**：用端口契约和模块关系约束生成，减少接口幻觉。
 - **工程化知识**：用 Verilog Playbook 和历史修复规则，而不是把原始规范全文塞进上下文。
-- **精简 Agent**：Planner、Coder、Verifier、Debugger 四角色，复杂度放在上下文和工具结果裁剪上。
+- **极简常驻上下文**：启动时只常驻 VeriGen system prompt 和 extension；Planner、Coder、Verifier、Debugger 与 Playbook 规则按需注入。
 
 ## 架构
 
 ```text
 VeriGen TypeScript 主体
   pi-coding-agent / pi-agent-core / pi-ai / pi-tui
-  ├─ Planner / Coder / Verifier / Debugger prompts
+  ├─ Minimal system prompt + on-demand Planner/Coder/Verifier/Debugger context
   ├─ Spec-Anchored KG        (graphology + zod)
   ├─ Verilog Playbook RAG    (vectra)
   ├─ Graphify Context        (repo/docs context graph)
@@ -171,8 +171,8 @@ verigen graphify-path docs/PDD-VeriGen.md packages/verigen/src/spec-kg.ts --json
 verigen board-smoke --smoke blink_led
 verigen hardware-flow --template blink_led
 
-# 产品 workbench
-verigen product-workbench
+# 状态面板 / dogfood workbench
+verigen product-workbench                 # 内部 dogfood/debug dashboard
 verigen product-preview --with-smoke [--tui]
 verigen product-preview --provider-page | --profiles
 verigen product-preview --report --output /tmp/verigen-preview-report.md
@@ -184,10 +184,18 @@ verigen product-template --id uart_loopback --output /tmp/verigen-uart-template
 `verigen agent` 是进入 pi coding-agent 的 VeriGen 专属入口。它会加载：
 
 - `verigen-system.md` 作为 system prompt
-- `verigen-planner/coder/verifier/debugger/icl.md` 作为 prompt templates
-- `verigen-playbook.md` 作为 skill
+- VeriGen extension，提供模型配置、Graphify 工具、状态面板和按需上下文命令
 
-运行时委托给原 `pi` CLI，因此保留 pi 的交互式对话、工具调用、会话和 TUI 基础能力。默认还会挂入内置 workbench extension；外部也可通过 `verigen/coding-agent-extension` 或 `installVerigenCodingAgentExtension()` 挂入 coding-agent widget/custom message renderer。
+它不会在启动时把 Planner/Coder/Verifier/Debugger prompt 或完整 Playbook skill 注入 system/context。需要专家 phase 时，在 TUI 内运行：
+
+```text
+/verigen-phase planner|coder|verifier|debugger [task]
+/verigen-rules <query>
+```
+
+对明显的 RTL/Verilog 任务，extension 会在模型调用前自动注入一个小型 phase/rule 上下文；`/verigen-phase` 用于显式指定或覆盖 phase，`/verigen-rules` 只检索并注入相关规则。
+
+运行时委托给原 `pi` CLI，因此保留 pi 的交互式对话、工具调用、会话、输入框和 `/` 指令引用手感。默认会加载内置 VeriGen extension，但不会展示完整 workbench；只有无可用模型等关键状态，或用户显式运行 `/verigen-workbench show` 时，才会在 editor 下方显示只读状态面板。该面板默认只显示模型状态、Python/uv 状态、当前任务、最近问题和下一步命令；`/verigen-workbench details` 才展开 logs、replay、board 和 report 摘要。外部也可通过 `verigen/coding-agent-extension` 或 `installVerigenCodingAgentExtension()` 挂入 coding-agent widget/custom message renderer。
 
 ### Graphify
 
@@ -225,13 +233,13 @@ export VERIGEN_TEST_LLM_API_KEY=<local-secret>
 | `packages/tui` | 终端 UI 基础库 |
 | `packages/verigen` | VeriGen TypeScript 垂直层：KG、RAG、Graphify、worker client、CLI |
 | `packages/verilog-analysis` | Python Verilog analysis worker，含 vendored `pyverilog` fork |
-| `.pi/prompts` | VeriGen Planner/Coder/Verifier/Debugger/System/ICL prompts |
-| `.pi/skills` | VeriGen Playbook skill |
+| `.pi/prompts` | VeriGen System prompt 与按需 Planner/Coder/Verifier/Debugger/ICL prompts |
+| `.pi/skills` | VeriGen Playbook rule pack |
 | `docs` | 产品设计、技术方案、handoff、S0 验证报告 |
 
 ## npm 分发策略
 
-`verigen` 发布时包含 TypeScript 编译产物、`verigen` CLI、`.pi` prompts/skills 资产、Python worker 源码和 `vendor/pyverilog` 魔改 fork；不包含 `.venv`、wheelhouse、Python cache、Dockerfile 或 PyPI 私有包。
+`verigen` 发布时包含 TypeScript 编译产物、`verigen` CLI、`.pi` prompt/rule 资产、Python worker 源码和 `vendor/pyverilog` 魔改 fork；不包含 `.venv`、wheelhouse、Python cache、Dockerfile 或 PyPI 私有包。
 
 首次运行时，CLI 使用 `uv` 从 npm 包内本地路径安装 worker 到受管 cache venv。第三方 Python 依赖从 PyPI 安装，`pyverilog==1.3.0+verigen` 从本地 `vendor/pyverilog` 安装。
 
@@ -242,13 +250,13 @@ export VERIGEN_TEST_LLM_API_KEY=<local-secret>
 - **基础设施（S0–S4）**：魔改 `pyverilog` fork 独立运行、Python analysis worker（JSONL RPC）、TypeScript 客户端、Spec KG / Playbook RAG / Graphify 迁移、npm 打包与 uv 自举。
 - **Agent 闭环（S5–S8）**：VeriGen mode/profile 与 `verigen agent` 入口、EDA ToolRunner（`iverilog/vvp`、Verilator、Yosys、Himasim 统一 schema）、Quality Probe fix-loop（四 Agent、最多 3 轮）、统一 Context Router（按预算裁剪 KG/Playbook/Graphify/trace/tool results）。
 - **板级与评测（S9–S12）**：board profile/schema、mock programmer backend、dry-run hardware flow（先真实仿真再 mock 上板）、release smoke checklist、evaluation suite（pass@1、3 轮收敛率、失败类型分布）。
-- **产品化（S13–S15）**：product workbench TUI（宽屏三栏/双栏/窄屏堆叠的响应式状态模型）、onboarding、provider config、project templates、board profile 管理、layout persistence、报告导出和 session replay。
+- **产品化（S13–S15）**：agent 内按需 VeriGen 状态面板、内部 dogfood/debug product workbench TUI、onboarding、provider config、project templates、board profile 管理、layout persistence、报告导出和 session replay。
 
 当前边界：
 
 - 还没有接真实 FPGA 上板流程；无设备阶段先做 mock/dry-run board backend。真实 FPGA 测试放到 S16，应从固定 `blink_led` bring-up 开始，再接 VeriGen 生成 RTL。
 - 还没有把 Himasim/Vivado/Quartus/Yosys profile 做成完整 board profile。
-- 产品 TUI 已有 MVP（交互入口、焦点、inspector 切换、density toggle），后续仍需视觉 polish 和更深的 agent runtime 接入。
+- `product-workbench` 是内部 dogfood/debug 入口，不作为默认用户 TUI 形态；主体验保持 pi 的 chat-first 输入框和 `/` 指令引用。
 
 各阶段完整交付物和下一步计划见 [VeriGen 产品化路线图](docs/ROADMAP-VeriGen.md)。
 
