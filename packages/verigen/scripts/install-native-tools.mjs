@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
 	createWriteStream,
@@ -6,209 +7,67 @@ import {
 	readFileSync,
 	readdirSync,
 	rmSync,
-	statSync,
 	writeFileSync,
 } from "node:fs";
 import { chmod, copyFile } from "node:fs/promises";
 import { arch, platform } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDir, "..");
 const cacheRoot = resolve(packageRoot, ".cache/native-tools");
 const distRoot = resolve(packageRoot, "dist/native-tools");
+const uvVersion = "0.8.4";
 
-const targets = [
-	{
-		id: "win32-x64",
-		tools: [
-			{
-				name: "fd",
-				version: "10.4.2",
-				repo: "sharkdp/fd",
-				asset: "fd-v10.4.2-x86_64-pc-windows-msvc.zip",
-				binary: "fd.exe",
-				license: "MIT OR Apache-2.0",
-			},
-			{
-				name: "rg",
-				version: "15.1.0",
-				repo: "BurntSushi/ripgrep",
-				asset: "ripgrep-15.1.0-x86_64-pc-windows-msvc.zip",
-				binary: "rg.exe",
-				license: "MIT OR Unlicense",
-			},
-			{
-				name: "uv",
-				version: "0.8.4",
-				repo: "astral-sh/uv",
-				asset: "uv-x86_64-pc-windows-msvc.zip",
-				binaries: ["uv.exe", "uvx.exe"],
-				license: "MIT OR Apache-2.0",
-			},
-		],
+const targets = {
+	"win32-x64": {
+		archive: "uv-x86_64-pc-windows-msvc.zip",
+		url: `https://github.com/astral-sh/uv/releases/download/${uvVersion}/uv-x86_64-pc-windows-msvc.zip`,
+		sha256: "817c50c80229f88de9699626ee3774c0cceed86099663e8fb00c5ffae7ea911c",
+		binaries: ["uv.exe", "uvx.exe"],
 	},
-	{
-		id: "win32-arm64",
-		tools: [
-			{
-				name: "fd",
-				version: "10.4.2",
-				repo: "sharkdp/fd",
-				asset: "fd-v10.4.2-aarch64-pc-windows-msvc.zip",
-				binary: "fd.exe",
-				license: "MIT OR Apache-2.0",
-			},
-			{
-				name: "rg",
-				version: "15.1.0",
-				repo: "BurntSushi/ripgrep",
-				asset: "ripgrep-15.1.0-aarch64-pc-windows-msvc.zip",
-				binary: "rg.exe",
-				license: "MIT OR Unlicense",
-			},
-			{
-				name: "uv",
-				version: "0.8.4",
-				repo: "astral-sh/uv",
-				asset: "uv-aarch64-pc-windows-msvc.zip",
-				binaries: ["uv.exe", "uvx.exe"],
-				license: "MIT OR Apache-2.0",
-			},
-		],
+	"win32-arm64": {
+		archive: "uv-aarch64-pc-windows-msvc.zip",
+		url: `https://github.com/astral-sh/uv/releases/download/${uvVersion}/uv-aarch64-pc-windows-msvc.zip`,
+		sha256: "34cdff9ed7e1ffece93a895e65377a0ea4f186eb6785ead045280be59edabf19",
+		binaries: ["uv.exe", "uvx.exe"],
 	},
-	{
-		id: "darwin-arm64",
-		tools: [
-			{
-				name: "fd",
-				version: "10.4.2",
-				repo: "sharkdp/fd",
-				asset: "fd-v10.4.2-aarch64-apple-darwin.tar.gz",
-				binary: "fd",
-				license: "MIT OR Apache-2.0",
-			},
-			{
-				name: "rg",
-				version: "15.1.0",
-				repo: "BurntSushi/ripgrep",
-				asset: "ripgrep-15.1.0-aarch64-apple-darwin.tar.gz",
-				binary: "rg",
-				license: "MIT OR Unlicense",
-			},
-			{
-				name: "uv",
-				version: "0.8.4",
-				repo: "astral-sh/uv",
-				asset: "uv-aarch64-apple-darwin.tar.gz",
-				binaries: ["uv", "uvx"],
-				license: "MIT OR Apache-2.0",
-			},
-		],
+	"darwin-arm64": {
+		archive: "uv-aarch64-apple-darwin.tar.gz",
+		url: `https://github.com/astral-sh/uv/releases/download/${uvVersion}/uv-aarch64-apple-darwin.tar.gz`,
+		sha256: "ef6785df8c23232ce6209c04acefd0c0d2ffb3a3ba0eef16422bdfe99a059105",
+		binaries: ["uv", "uvx"],
 	},
-	{
-		id: "darwin-x64",
-		tools: [
-			{
-				name: "fd",
-				version: "10.3.0",
-				repo: "sharkdp/fd",
-				asset: "fd-v10.3.0-x86_64-apple-darwin.tar.gz",
-				binary: "fd",
-				license: "MIT OR Apache-2.0",
-			},
-			{
-				name: "rg",
-				version: "15.1.0",
-				repo: "BurntSushi/ripgrep",
-				asset: "ripgrep-15.1.0-x86_64-apple-darwin.tar.gz",
-				binary: "rg",
-				license: "MIT OR Unlicense",
-			},
-			{
-				name: "uv",
-				version: "0.8.4",
-				repo: "astral-sh/uv",
-				asset: "uv-x86_64-apple-darwin.tar.gz",
-				binaries: ["uv", "uvx"],
-				license: "MIT OR Apache-2.0",
-			},
-		],
+	"darwin-x64": {
+		archive: "uv-x86_64-apple-darwin.tar.gz",
+		url: `https://github.com/astral-sh/uv/releases/download/${uvVersion}/uv-x86_64-apple-darwin.tar.gz`,
+		sha256: "14e5309f182d1a92cf6c82f5891a0a0dc1cd5d46627171eaa1e84fa2b7e0afc3",
+		binaries: ["uv", "uvx"],
 	},
-	{
-		id: "linux-x64",
-		tools: [
-			{
-				name: "fd",
-				version: "10.4.2",
-				repo: "sharkdp/fd",
-				asset: "fd-v10.4.2-x86_64-unknown-linux-gnu.tar.gz",
-				binary: "fd",
-				license: "MIT OR Apache-2.0",
-			},
-			{
-				name: "rg",
-				version: "15.1.0",
-				repo: "BurntSushi/ripgrep",
-				asset: "ripgrep-15.1.0-x86_64-unknown-linux-musl.tar.gz",
-				binary: "rg",
-				license: "MIT OR Unlicense",
-			},
-			{
-				name: "uv",
-				version: "0.8.4",
-				repo: "astral-sh/uv",
-				asset: "uv-x86_64-unknown-linux-gnu.tar.gz",
-				binaries: ["uv", "uvx"],
-				license: "MIT OR Apache-2.0",
-			},
-		],
+	"linux-x64": {
+		archive: "uv-x86_64-unknown-linux-gnu.tar.gz",
+		url: `https://github.com/astral-sh/uv/releases/download/${uvVersion}/uv-x86_64-unknown-linux-gnu.tar.gz`,
+		sha256: "eb61d39fdc6ea21a6d00a24b50376102168240849c5022d3eba331f972ba3934",
+		binaries: ["uv", "uvx"],
 	},
-	{
-		id: "linux-arm64",
-		tools: [
-			{
-				name: "fd",
-				version: "10.4.2",
-				repo: "sharkdp/fd",
-				asset: "fd-v10.4.2-aarch64-unknown-linux-gnu.tar.gz",
-				binary: "fd",
-				license: "MIT OR Apache-2.0",
-			},
-			{
-				name: "rg",
-				version: "15.1.0",
-				repo: "BurntSushi/ripgrep",
-				asset: "ripgrep-15.1.0-aarch64-unknown-linux-gnu.tar.gz",
-				binary: "rg",
-				license: "MIT OR Unlicense",
-			},
-			{
-				name: "uv",
-				version: "0.8.4",
-				repo: "astral-sh/uv",
-				asset: "uv-aarch64-unknown-linux-gnu.tar.gz",
-				binaries: ["uv", "uvx"],
-				license: "MIT OR Apache-2.0",
-			},
-		],
+	"linux-arm64": {
+		archive: "uv-aarch64-unknown-linux-gnu.tar.gz",
+		url: `https://github.com/astral-sh/uv/releases/download/${uvVersion}/uv-aarch64-unknown-linux-gnu.tar.gz`,
+		sha256: "d42742a28ce161e72cce45c8c5621ee23317e30d461f595c382acf0f9b331f20",
+		binaries: ["uv", "uvx"],
 	},
-];
+};
 
-function releaseUrl(tool) {
-	if (tool.name === "rg" || tool.name === "uv") {
-		return `https://github.com/${tool.repo}/releases/download/${tool.version}/${tool.asset}`;
-	}
-	return `https://github.com/${tool.repo}/releases/download/v${tool.version}/${tool.asset}`;
+function usage() {
+	console.error("Usage: node scripts/install-native-tools.mjs --install-current");
 }
 
 async function download(url, destination) {
 	const response = await fetch(url, {
-		headers: { "User-Agent": "verigen-native-tool-packager" },
+		headers: { "User-Agent": "verigen-native-tool-installer" },
 		signal: AbortSignal.timeout(120_000),
 	});
 	if (!response.ok || !response.body) {
@@ -229,6 +88,15 @@ function run(command, args) {
 	}
 }
 
+function extract(archive, destination) {
+	mkdirSync(destination, { recursive: true });
+	if (archive.endsWith(".zip")) {
+		run("unzip", ["-q", "-o", archive, "-d", destination]);
+		return;
+	}
+	run("tar", ["xzf", archive, "-C", destination]);
+}
+
 function findBinary(root, binary) {
 	const stack = [root];
 	while (stack.length > 0) {
@@ -242,58 +110,55 @@ function findBinary(root, binary) {
 	return undefined;
 }
 
-function toolBinaries(tool) {
-	return tool.binaries ?? [tool.binary];
-}
-
-function extract(archive, destination) {
-	mkdirSync(destination, { recursive: true });
-	if (archive.endsWith(".zip")) {
-		run("unzip", ["-q", "-o", archive, "-d", destination]);
-		return;
-	}
-	run("tar", ["xzf", archive, "-C", destination]);
-}
-
 function currentTargetId() {
 	return `${platform()}-${arch()}`;
 }
 
-mkdirSync(cacheRoot, { recursive: true });
-rmSync(distRoot, { recursive: true, force: true });
-mkdirSync(distRoot, { recursive: true });
-
-for (const target of targets) {
-	const targetDir = join(distRoot, target.id);
-	mkdirSync(targetDir, { recursive: true });
-	const notices = [];
-	for (const tool of target.tools) {
-		const archive = join(cacheRoot, `${tool.version}-${tool.asset}`);
-		if (!existsSync(archive) || statSync(archive).size === 0) {
-			await download(releaseUrl(tool), archive);
-		}
-		const extractDir = join(cacheRoot, `${target.id}-${tool.name}-extract`);
-		rmSync(extractDir, { recursive: true, force: true });
-		extract(archive, extractDir);
-		for (const binaryName of toolBinaries(tool)) {
-			const binary = findBinary(extractDir, binaryName);
-			if (!binary) {
-				throw new Error(`Could not find ${binaryName} in ${basename(archive)}`);
-			}
-			const output = join(targetDir, binaryName);
-			await copyFile(binary, output);
-			if (!binaryName.endsWith(".exe")) {
-				await chmod(output, 0o755);
-			}
-		}
-		const archiveSha256 = hashFile(archive);
-		notices.push(`${tool.name} ${tool.version} (${tool.repo}) asset=${tool.asset} sha256=${archiveSha256} license=${tool.license}`);
-		rmSync(extractDir, { recursive: true, force: true });
+async function installCurrent() {
+	const targetId = currentTargetId();
+	const target = targets[targetId];
+	if (!target) {
+		throw new Error(`No bundled uv target for ${targetId}`);
 	}
-	const noticePath = join(targetDir, "THIRD_PARTY_NOTICES.txt");
-	writeFileSync(noticePath, `${notices.join("\n")}\n`, "utf8");
+	mkdirSync(cacheRoot, { recursive: true });
+	const archive = join(cacheRoot, target.archive);
+	if (!existsSync(archive) || hashFile(archive) !== target.sha256) {
+		await download(target.url, archive);
+	}
+	const actualSha256 = hashFile(archive);
+	if (actualSha256 !== target.sha256) {
+		throw new Error(`uv checksum mismatch: expected ${target.sha256}, got ${actualSha256}`);
+	}
+	const extractDir = join(cacheRoot, `${targetId}-extract`);
+	rmSync(extractDir, { recursive: true, force: true });
+	extract(archive, extractDir);
+
+	const targetDir = join(distRoot, targetId);
+	rmSync(targetDir, { recursive: true, force: true });
+	mkdirSync(targetDir, { recursive: true });
+	for (const binaryName of target.binaries) {
+		const binary = findBinary(extractDir, binaryName);
+		if (!binary) {
+			throw new Error(`Could not find ${binaryName} in ${target.archive}`);
+		}
+		const output = join(targetDir, binaryName);
+		await copyFile(binary, output);
+		if (!binaryName.endsWith(".exe")) {
+			await chmod(output, 0o755);
+		}
+	}
+	writeFileSync(
+		join(targetDir, "THIRD_PARTY_NOTICES.txt"),
+		`uv ${uvVersion} (astral-sh/uv) asset=${target.url} sha256=${target.sha256} license=MIT OR Apache-2.0\n`,
+		"utf8",
+	);
+	rmSync(extractDir, { recursive: true, force: true });
+	console.log(`Installed uv/uvx for ${targetId} into ${targetDir}`);
 }
 
-if (!targets.some((target) => target.id === currentTargetId())) {
-	console.warn(`No bundled native tools target for ${currentTargetId()}`);
+if (process.argv.includes("--install-current")) {
+	await installCurrent();
+} else {
+	usage();
+	process.exitCode = 1;
 }

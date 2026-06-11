@@ -20,10 +20,11 @@
 Windows PowerShell 一键安装：
 
 ```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
 irm https://raw.githubusercontent.com/rongxinzy/VeriGen/main/packages/verigen/install.ps1 | iex
 ```
 
-该脚本会检测 Node.js/npm 版本、提示安装 Git Bash、通过 `https://registry.npmmirror.com` 安装 npm 包，并提前用包内 bundled `uv` 创建 Python worker venv 和依赖。若 Node.js/npm 缺失或版本不满足，脚本会输出 Chocolatey + Node.js `24.16.0` 安装命令。
+该脚本从 Node.js 冷启动开始：若缺少 Node.js/npm 或版本不满足，会自动安装 Chocolatey，再执行 `choco install nodejs --version="24.16.0" -y`；随后从 Astral 官方 release 下载并校验 `uv.exe`/`uvx.exe`，最后执行 `npm install -g verigen@latest --registry https://registry.npmmirror.com`。脚本也会提示安装 Git Bash，并在 npm 安装后预热 Python worker venv 和依赖。
 
 通用 npm 安装：
 
@@ -48,7 +49,7 @@ npm install -g --prefix /tmp/verigen-preview /tmp/verigen-pack/verigen-0.79.2.tg
 - `iverilog`
 - `vvp`
 
-npm 包内自带 `uv`/`uvx` 和 Python worker 源码，PATH 中的 `uv` 只作为 fallback。Python worker 会在安装脚本预热阶段或首次运行时由 bundled `uv` 自动创建 cache venv。npm 包内自带 worker 源码和魔改 `pyverilog` fork；`ply`、`jinja2`、`networkx`、`numpy`、`pandas`、`vcdvcd` 等第三方 Python 依赖从 PyPI 安装。
+npm 包内自带 Python worker 源码，不再内置大体积 native tools。安装脚本会从 Astral 官方 release 下载当前平台 `uv`/`uvx` 到 `dist/native-tools/<platform>/`；PATH 中的 `uv` 只作为 fallback。Python worker 会在安装脚本预热阶段或首次运行时由 bundled `uv` 自动创建 cache venv。npm 包内自带 worker 源码和魔改 `pyverilog` fork；`ply`、`jinja2`、`networkx`、`numpy`、`pandas`、`vcdvcd` 等第三方 Python 依赖从 PyPI 安装。
 
 不需要 Docker，也不会发布 VeriGen 自己的 Python worker 到 PyPI。
 
@@ -259,6 +260,7 @@ S4 的分发策略是：
 
 - npm tarball 包含 `dist/python/verilog-analysis`。
 - `dist/python/verilog-analysis/vendor/pyverilog` 是魔改 pyverilog fork。
+- npm tarball 不包含 bundled uv/uvx native tools；安装脚本或首次运行会从 Astral 官方 release 下载当前平台 uv/uvx。
 - 首次运行时，CLI 从 npm 包内本地路径安装 worker 到 uv cache venv。
 - `pyverilog==1.3.0+verigen` 从本地 `vendor/pyverilog` 安装，不依赖 PyPI 官方 `pyverilog`。
 - `.venv`、wheelhouse、Python cache、`__pycache__` 和 pyc/pyo 不进入 npm tarball。

@@ -70,9 +70,9 @@ VeriGen TypeScript 主体
 基础依赖：
 
 - Node.js `>=22.19.0` 和 npm
-- uv
-- Python `>=3.11,<3.13`
 - `iverilog` / `vvp`
+
+安装脚本会下载 bundled `uv`/`uvx`，并由 uv 自动拉取受管 Python 3.11；用户不需要预先安装 uv 或 Python。
 
 推荐后续接入：Verilator、Yosys、Himasim，以及 FPGA vendor tools（Vivado、Quartus 或国产工具链）。
 
@@ -81,10 +81,11 @@ VeriGen TypeScript 主体
 Windows PowerShell 一键安装：
 
 ```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
 irm https://raw.githubusercontent.com/rongxinzy/VeriGen/main/packages/verigen/install.ps1 | iex
 ```
 
-该脚本会检测 Node.js/npm 版本、提示安装 Git Bash、通过 `https://registry.npmmirror.com` 安装 npm 包，并提前用包内 bundled `uv` 创建 Python worker venv 和依赖。若 Node.js/npm 缺失或版本不满足，脚本会输出 Chocolatey + Node.js `24.16.0` 安装命令。
+该脚本从 Node.js 冷启动开始：若缺少 Node.js/npm 或版本不满足，会自动安装 Chocolatey，再执行 `choco install nodejs --version="24.16.0" -y`；随后从 Astral 官方 release 下载并校验 `uv.exe`/`uvx.exe`，最后执行 `npm install -g verigen@latest --registry https://registry.npmmirror.com`。脚本也会提示安装 Git Bash，并在 npm 安装后预热 Python worker venv 和依赖。
 
 通用 npm 安装：
 
@@ -96,7 +97,7 @@ verigen worker-smoke    # 验证 Python worker 可用
 verigen agent           # 进入 VeriGen agent
 ```
 
-安装脚本会提前创建 Python worker cache venv；如果预热失败，首次运行时 CLI 仍会用包内 bundled `uv` 把包内 Python worker 自举到受管 cache venv，无需手动配置 Python 环境（详见 [npm 分发策略](#npm-分发策略)）。
+安装脚本会提前下载 bundled `uv`/`uvx` 并创建 Python worker cache venv；如果预热失败，首次运行时 CLI 仍会自动下载 bundled uv 并把包内 Python worker 自举到受管 cache venv，无需手动配置 Python 环境（详见 [npm 分发策略](#npm-分发策略)）。
 
 ### 本地开发
 
@@ -239,9 +240,9 @@ export VERIGEN_TEST_LLM_API_KEY=<local-secret>
 
 ## npm 分发策略
 
-`verigen` 发布时包含 TypeScript 编译产物、`verigen` CLI、`.pi` prompt/rule 资产、Python worker 源码和 `vendor/pyverilog` 魔改 fork；不包含 `.venv`、wheelhouse、Python cache、Dockerfile 或 PyPI 私有包。
+`verigen` 发布时包含 TypeScript 编译产物、`verigen` CLI、`.pi` prompt/rule 资产、Python worker 源码和 `vendor/pyverilog` 魔改 fork；不包含 bundled uv/uvx native tools、`.venv`、wheelhouse、Python cache、Dockerfile 或 PyPI 私有包。
 
-首次运行时，CLI 使用 `uv` 从 npm 包内本地路径安装 worker 到受管 cache venv。第三方 Python 依赖从 PyPI 安装，`pyverilog==1.3.0+verigen` 从本地 `vendor/pyverilog` 安装。
+安装脚本会从 Astral 官方 release 下载当前平台的 `uv`/`uvx` 到 `dist/native-tools/<platform>/`。如果用户绕过安装脚本直接运行 `npm install -g verigen@latest`，首次需要 Python worker 或 Graphify `uvx` 时，CLI 会自动补下载 bundled uv/uvx；之后使用该 bundled uv 从 npm 包内本地路径安装 worker 到受管 cache venv。第三方 Python 依赖从 PyPI 安装，`pyverilog==1.3.0+verigen` 从本地 `vendor/pyverilog` 安装。
 
 ## 项目状态
 

@@ -44,8 +44,18 @@ export {
 	executableName,
 	findBundledNativeTool,
 	findBundledNativeToolDir,
+	getNativeToolsStatus,
+	type InstallBundledNativeToolsOptions,
+	type InstallBundledNativeToolsResult,
+	installBundledNativeTools,
 	type NativeToolLookupOptions,
+	type NativeToolManifest,
+	type NativeToolsStatus,
+	type NativeToolsStatusOptions,
+	nativeToolsInstallDir,
+	nativeToolsManifestPath,
 	nativeToolTargetId,
+	readNativeToolsManifest,
 } from "./native-tools.ts";
 export {
 	defaultPlaybookIndexPath,

@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { inspect } from "node:util";
 import { runHimasim, runIverilogVvp, runVerilatorLint, runYosysSynth } from "./eda-toolrunner.ts";
 import { GraphifyContext } from "./graphify-context.ts";
+import { getNativeToolsStatus, installBundledNativeTools } from "./native-tools.ts";
 import { bootstrapPythonWorker, type DoctorCheck, doctorVerigenInstall } from "./python-worker-bootstrap.ts";
 import {
 	defaultCodegenQualityProbeCases,
@@ -66,6 +67,7 @@ Commands:
   agent            Launch the VeriGen chat-first coding agent
   mode             Print the VeriGen S5 mode/profile and pipeline stages
   doctor           Check Node, uv, iverilog/vvp, worker bootstrap, and Graphify status
+  native-tools     Install or inspect bundled uv/uvx native tools
   python-bootstrap Prepare the Python worker venv with bundled uv
   worker-smoke     Bootstrap the worker and run one parse_ast JSONL request
   trace-demo       Run the built-in failing RTL/VCD example and print the S5 trace panel
@@ -338,6 +340,34 @@ async function runDoctor(args: string[]): Promise<number> {
 		printDoctorChecks(result.checks);
 	}
 	return result.ok ? 0 : 1;
+}
+
+async function runNativeTools(args: string[]): Promise<number> {
+	const action = positionalArgs(args)[0] ?? "status";
+	if (action === "status") {
+		const status = getNativeToolsStatus();
+		if (hasFlag(args, "--json")) {
+			console.log(JSON.stringify(status, null, 2));
+		} else {
+			console.log(`${status.installed ? "OK" : "WARN"} native-tools: ${status.targetId}`);
+			console.log(`dir: ${status.dir}`);
+			if (status.missingBinaries.length > 0) console.log(`missing: ${status.missingBinaries.join(", ")}`);
+		}
+		return status.targetFound ? 0 : 1;
+	}
+	if (action === "install") {
+		const result = await installBundledNativeTools({ force: hasFlag(args, "--force") });
+		if (hasFlag(args, "--json")) {
+			console.log(JSON.stringify(result, null, 2));
+		} else {
+			console.log(`OK native-tools: ${result.action} ${result.targetId}`);
+			console.log(`dir: ${result.dir}`);
+			if (result.url) console.log(`source: ${result.url}`);
+		}
+		return 0;
+	}
+	console.error("native-tools action must be status or install");
+	return 1;
 }
 
 async function runPythonBootstrap(args: string[]): Promise<number> {
@@ -966,6 +996,7 @@ async function main(args: string[]): Promise<number> {
 	if (command === "agent") return await runAgent(args.slice(1));
 	if (command === "mode") return await runMode(args.slice(1));
 	if (command === "doctor") return await runDoctor(args.slice(1));
+	if (command === "native-tools") return await runNativeTools(args.slice(1));
 	if (command === "python-bootstrap") return await runPythonBootstrap(args.slice(1));
 	if (command === "worker-smoke") return await runWorkerSmoke(args.slice(1));
 	if (command === "trace-demo") return await runTraceDemo(args.slice(1));

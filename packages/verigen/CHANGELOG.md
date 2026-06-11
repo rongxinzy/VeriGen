@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Reduced the npm package size by downloading bundled uv/uvx at install time instead of publishing native tool binaries in the tarball.
+- Reworked the Windows installer to bootstrap Node.js through Chocolatey, download verified Astral uv/uvx binaries, and then install `verigen@latest`.
+
 ## [0.79.14] - 2026-06-11
 
 ### Changed

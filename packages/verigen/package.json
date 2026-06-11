@@ -28,7 +28,8 @@
 	],
 	"scripts": {
 		"clean": "shx rm -rf dist",
-		"build": "tsgo -p tsconfig.build.json && shx chmod +x dist/cli.js && node scripts/copy-python-worker.mjs && node scripts/install-native-tools.mjs",
+		"build": "tsgo -p tsconfig.build.json && shx chmod +x dist/cli.js && node scripts/copy-python-worker.mjs && shx rm -rf dist/native-tools dist/native-tools-manifest.json",
+		"native-tools:install-current": "node scripts/install-native-tools.mjs --install-current",
 		"test": "node --test test/*.test.ts",
 		"prepack": "npm run build",
 		"prepublishOnly": "npm run clean && npm run build"

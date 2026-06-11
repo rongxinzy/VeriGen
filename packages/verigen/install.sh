@@ -115,6 +115,13 @@ else
 fi
 
 verigen_bin="$(verigen_command)"
+log "installing bundled uv/uvx"
+if "$verigen_bin" native-tools install --json >/dev/null; then
+	log "bundled uv/uvx ready"
+else
+	warn "bundled uv/uvx install failed; VeriGen will retry on first Python worker use or fall back to PATH uv"
+fi
+
 if [ -n "$skip_python_bootstrap" ]; then
 	log "skipping Python worker bootstrap"
 else

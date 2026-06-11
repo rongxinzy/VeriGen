@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GraphifyContext } from "./graphify-context.ts";
-import { executableName, findBundledNativeTool } from "./native-tools.ts";
+import { executableName, findBundledNativeTool, installBundledNativeTools } from "./native-tools.ts";
 
 export interface PythonWorkerBootstrapOptions {
 	packageRoot?: string;
@@ -156,6 +156,18 @@ export function findBundledUv(packageRoot = currentPackageRoot()): string | unde
 	return findBundledNativeTool(packageRoot, "uv");
 }
 
+async function resolveUvCommand(packageRoot: string, configuredCommand: string | undefined): Promise<string> {
+	if (configuredCommand) return configuredCommand;
+	const bundledUv = findBundledUv(packageRoot);
+	if (bundledUv) return bundledUv;
+	try {
+		await installBundledNativeTools({ packageRoot });
+	} catch {
+		return "uv";
+	}
+	return findBundledUv(packageRoot) ?? "uv";
+}
+
 function resolveUvEnv(env?: Record<string, string>): Record<string, string> | undefined {
 	const mirror = (env?.VERIGEN_UV_MIRROR ?? process.env.VERIGEN_UV_MIRROR)?.trim() ?? "tuna";
 	if (mirror === "off" || mirror === "0" || mirror === "false" || mirror === "") return env;
@@ -227,7 +239,7 @@ export async function bootstrapPythonWorker(options: PythonWorkerBootstrapOption
 	const cacheRoot = options.cacheRoot ? resolve(options.cacheRoot) : defaultCacheRoot();
 	const packageVersion = currentPackageVersion(packageRoot);
 	const paths = venvPaths(cacheRoot, packageVersion, workerRoot);
-	const command = options.uvCommand ?? findBundledUv(packageRoot) ?? "uv";
+	const command = await resolveUvCommand(packageRoot, options.uvCommand);
 	const bootstrapEnv = resolveUvEnv(options.env);
 	const commands: CommandResult[] = [];
 	if (!options.force && pathLooksExecutable(paths.pythonPath) && pathLooksExecutable(paths.workerCommand)) {
@@ -332,7 +344,7 @@ export async function doctorVerigenInstall(
 		required: true,
 	});
 
-	const uvCommand = options.uvCommand ?? findBundledUv(packageRoot) ?? "uv";
+	const uvCommand = await resolveUvCommand(packageRoot, options.uvCommand);
 	const uv = await commandProbe(uvCommand, ["--version"]);
 	checks.push(commandCheck("uv", uv, true));
 	const iverilog = await commandProbe("iverilog", ["-V"]);

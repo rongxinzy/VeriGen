@@ -1,7 +1,12 @@
 import { spawn } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { currentVerigenPackageRoot, executableName, findBundledNativeTool } from "./native-tools.ts";
+import {
+	currentVerigenPackageRoot,
+	executableName,
+	findBundledNativeTool,
+	installBundledNativeTools,
+} from "./native-tools.ts";
 
 export interface GraphifyContextOptions {
 	repoRoot: string;
@@ -286,6 +291,13 @@ export class GraphifyContext {
 	}
 
 	async update(target = this.options.repoRoot): Promise<GraphifyUpdateResult> {
+		if (!this.options.uvxCommand && !findBundledNativeTool(this.options.packageRoot, "uvx")) {
+			try {
+				await installBundledNativeTools({ packageRoot: this.options.packageRoot });
+			} catch {
+				// PATH uvx remains the fallback below.
+			}
+		}
 		const command = resolveGraphifyUpdateCommand(this.options.packageRoot, this.options.uvxCommand);
 		const args = ["--from", "graphifyy", "graphify", "update", target, "--no-cluster"];
 		return await new Promise((resolvePromise) => {

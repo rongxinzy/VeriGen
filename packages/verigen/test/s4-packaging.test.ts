@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { executableName, findBundledNativeTool } from "../src/native-tools.ts";
+import { executableName, findBundledNativeTool, getNativeToolsStatus } from "../src/native-tools.ts";
 import {
 	bootstrapPythonWorker,
 	findBundledPythonWorkerRoot,
@@ -89,7 +89,13 @@ describe("S4 npm packaging surface", () => {
 			throw new Error("expected package build script to be a string");
 		}
 		assert.match(buildScript, /copy-python-worker/);
+		assert.doesNotMatch(buildScript, /install-native-tools/);
+		assert.match(buildScript, /dist\/native-tools/);
 		assert.equal(parsed.scripts.prepack, "npm run build");
+		assert.equal(
+			parsed.scripts["native-tools:install-current"],
+			"node scripts/install-native-tools.mjs --install-current",
+		);
 		assert.ok(isRecord(parsed.dependencies));
 		assert.equal(parsed.dependencies["@earendil-works/pi-coding-agent"], "0.79.0");
 		assert.equal(parsed.dependencies["@earendil-works/pi-tui"], "0.79.0");
@@ -103,19 +109,26 @@ describe("S4 npm packaging surface", () => {
 
 		const nativeToolsScript = readFileSync(join(packageRoot, "scripts", "install-native-tools.mjs"), "utf8");
 		assert.match(nativeToolsScript, /uvx/);
+		assert.match(nativeToolsScript, /--install-current/);
 
 		const installScript = readFileSync(join(packageRoot, "install.sh"), "utf8");
 		assert.match(installScript, /--ignore-scripts/);
 		assert.match(installScript, /--registry/);
 		assert.match(installScript, /registry\.npmmirror\.com/);
+		assert.match(installScript, /native-tools install --json/);
 		assert.match(installScript, /python-bootstrap --json/);
 		assert.match(installScript, /Python worker cache and dependencies/);
 		assert.match(installScript, /VERIGEN_SKIP_PYTHON_BOOTSTRAP/);
 
 		const installPowerShell = readFileSync(join(packageRoot, "install.ps1"), "utf8");
+		assert.match(installPowerShell, /Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force/);
 		assert.match(installPowerShell, /--ignore-scripts/);
 		assert.match(installPowerShell, /--registry/);
 		assert.match(installPowerShell, /registry\.npmmirror\.com/);
+		assert.match(installPowerShell, /community\.chocolatey\.org\/install\.ps1/);
+		assert.match(installPowerShell, /uv-x86_64-pc-windows-msvc\.zip/);
+		assert.match(installPowerShell, /uvx\.exe/);
+		assert.match(installPowerShell, /npm install -g/);
 		assert.match(installPowerShell, /python-bootstrap --json/);
 		assert.match(installPowerShell, /Python worker cache and dependencies/);
 		assert.match(installPowerShell, /VERIGEN_SKIP_PYTHON_BOOTSTRAP/);
@@ -194,6 +207,23 @@ describe("S4 Python worker bootstrap", () => {
 			findBundledNativeTool(packageDir, "uvx", { platform: "win32", arch: "x64" }),
 			join(windowsToolDir, "uvx.exe"),
 		);
+	});
+
+	test("uses official Astral uv target when npm package has no native-tools manifest", () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "verigen-native-status-"));
+		tempDirs.push(tempDir);
+		const packageDir = join(tempDir, "package");
+		mkdirSync(join(packageDir, "dist"), { recursive: true });
+
+		const status = getNativeToolsStatus({
+			packageRoot: packageDir,
+			target: { platform: "win32", arch: "x64" },
+		});
+
+		assert.equal(status.manifestFound, false);
+		assert.equal(status.targetFound, true);
+		assert.equal(status.installed, false);
+		assert.deepEqual(status.missingBinaries, ["uv.exe", "uvx.exe"]);
 	});
 
 	test("prefers the bundled uv command for Python worker bootstrap", () => {
