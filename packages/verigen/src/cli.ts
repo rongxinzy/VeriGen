@@ -2,7 +2,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { inspect } from "node:util";
-import { runHimasim, runIverilogVvp, runVerilatorLint, runYosysSynth } from "./eda-toolrunner.ts";
+import { runHimasim, runIverilogVvp, runQuartus, runVerilatorLint, runYosysSynth } from "./eda-toolrunner.ts";
 import { GraphifyContext } from "./graphify-context.ts";
 import { getNativeToolsStatus, installBundledNativeTools } from "./native-tools.ts";
 import { bootstrapPythonWorker, type DoctorCheck, doctorVerigenInstall } from "./python-worker-bootstrap.ts";
@@ -73,7 +73,7 @@ Commands:
   trace-demo       Run the built-in failing RTL/VCD example and print the S5 trace panel
   trace-panel      Trace user-provided RTL/VCD files and print the S5 trace panel
   tui-preview      Render the S5 TUI preview for trace-demo or quality-probe
-  tool-runner      Run S6 EDA profiles: sim, lint, synth, or himasim
+  tool-runner      Run EDA profiles: sim, lint, synth, himasim, or quartus
   quality-probe    List, run, or fix-loop Codegen Quality Probe cases
   board-smoke      Run S9 mock board bring-up dry-run
   hardware-flow    Run S10 sim plus mock board dry-run hardware flow
@@ -96,6 +96,8 @@ Options:
   --json           Print machine-readable JSON
   --rtl PATH       RTL file for trace-panel
   --tb PATH        Testbench file for tool-runner sim
+  --family TEXT    Device family for tool-runner quartus (default: Cyclone IV E)
+  --device TEXT    Device part for tool-runner quartus (default: EP4CE10F17C8)
   --vcd PATH       VCD file for trace-panel
   --mismatch LIST  Comma-separated mismatch signals for trace-panel
   --top NAME       Top module for trace-panel
@@ -594,7 +596,27 @@ async function runToolRunner(args: string[]): Promise<number> {
 		return result.ok ? 0 : 1;
 	}
 
-	console.error("tool-runner action must be sim, lint, synth, or himasim");
+	if (action === "quartus") {
+		if (rtl.length === 0) {
+			console.error("tool-runner quartus requires --rtl file[,file]");
+			return 1;
+		}
+		const result = await runQuartus({
+			rtl,
+			top,
+			family: optionValue(args, "--family"),
+			device: optionValue(args, "--device"),
+			keepWorkDir: hasFlag(args, "--keep-temp"),
+		});
+		if (hasFlag(args, "--json")) {
+			console.log(JSON.stringify(result, null, 2));
+		} else {
+			console.log(inspect(result, { colors: false, depth: null }));
+		}
+		return result.ok ? 0 : 1;
+	}
+
+	console.error("tool-runner action must be sim, lint, synth, himasim, or quartus");
 	return 1;
 }
 

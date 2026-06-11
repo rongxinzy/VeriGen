@@ -42,9 +42,9 @@ VeriGen 面向**需求理解 → 代码生成 → 仿真验证 → 调试优化*
                  └────────────┬─────────────────┘
                               ▼
                  ┌──────────────────────────────┐
-                 │    仿真 / 综合 / lint 验证      │
-                 │  iverilog │ Verilator │ Yosys  │
-                 │         Himasim                │
+                  │    仿真 / 综合 / lint 验证      │
+                  │  iverilog │ Verilator │ Yosys  │
+                  │  Himasim │ Quartus (Tcl)       │
                  └────────────┬─────────────────┘
                               │
                 ┌─────────────┴─────────────┐
@@ -86,10 +86,10 @@ VeriGen 面向**需求理解 → 代码生成 → 仿真验证 → 调试优化*
 |---|---|
 | **多模态输入理解** | 支持文本、时序图、PDF、图片等多种输入格式，自动提取模块功能、端口时序与接口约束 |
 | **多模型适配** | 支持配置多种大模型（含国产模型），可插拔 provider 架构，适配私有化部署场景 |
-| **EDA 工具链集成** | 统一接入 iverilog/vvp、Verilator（lint）、Yosys（逻辑综合）、Himasim（华大九天仿真） |
+| **EDA 工具链集成** | 统一接入 iverilog/vvp、Verilator（lint）、Yosys（逻辑综合）、Himasim（华大九天仿真）、Quartus（Tcl 自动化全流程） |
 | **自动调试优化闭环** | 仿真失败后自动定位（AST 波形追踪）、Debugger 生成修复、复验验证，最多 3 轮收敛 |
 | **测试激励生成** | 自动生成 testbench，支持覆盖率统计 |
-| **MCP 工具配置** | 支持配置 MCP 工具扩展，集成 Himasim 等仿真工具 |
+| **MCP 工具配置** | 支持配置 MCP 工具扩展，集成 Himasim、Quartus 等 EDA 工具 |
 | **最小 token 消耗** | 极简常驻上下文 + 按需注入 phase/rule，降低推理成本 |
 | **并发多任务** | 支持同时执行多个 Verilog 生成与验证任务 |
 | **私有化部署** | 纯 TypeScript + 受管 Python worker，不依赖云端服务，数据不出域 |
@@ -115,7 +115,7 @@ VeriGen TypeScript 主体
   └─ identify_seq_element
 
 外部工具
-  iverilog / vvp / verilator / yosys / himasim / FPGA vendor tools
+  iverilog / vvp / verilator / yosys / himasim / quartus (Tcl) / FPGA vendor tools
 ```
 
 两条设计约定：

@@ -69,6 +69,8 @@ verigen tool-runner sim --rtl dut.v --tb tb.v --top tb --json
 verigen tool-runner lint --rtl dut.v --top dut --json
 verigen tool-runner synth --rtl dut.v --top dut --json
 verigen tool-runner himasim --json
+verigen tool-runner quartus --rtl top.v --json
+verigen tool-runner quartus --rtl top.v --family "Cyclone V" --device 5CGXFC7C7F23C8N
 verigen quality-probe list
 verigen quality-probe run --case l0-mux2 --live
 verigen quality-probe run --case l0-mux2 --live --run-tools
@@ -146,8 +148,9 @@ S6 已新增统一 EDA ToolRunner：
 
 - `iverilog-vvp`：compile + simulation。
 - `verilator-lint`：Verilator lint profile。
-- `yosys-synth`：Yosys synth/check profile。
+- `yosys-synth`：Yosys synth/check profile（Tcl 脚本驱动）。
 - `himasim`：Himasim backend placeholder/profile，未安装时返回 `missing_tool`。
+- `quartus`：Quartus Tcl 全流程。自动生成 `.tcl` 脚本，通过 `quartus_sh -t` 执行工程创建 → 综合（map）→ 布局布线（fit）→ 编程文件（asm）→ 时序分析（sta）。支持 `--family` / `--device` 参数指定器件。
 
 统一输出 schema 包含：
 
