@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Removed `moonshotai/kimi-k2.6:free` from OpenRouter model test fixture. The `:free` variant was removed from the upstream OpenRouter API.
+
 ## [0.79.2] - 2026-06-09
 
 ## [0.79.1] - 2026-06-09

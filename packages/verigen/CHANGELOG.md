@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added Quartus Tcl full-flow runner with stage selection: project, map (synthesis), fit (place & route), asm (assembly), sta (timing analysis), compile (full flow), pgm (programming). Supports `--family`, `--device`, `--rev`, `--64bit`, `--jvm-heap`, `--lic`, `--cable`, `--pgm-mode`, `--sof` options. ([#?](https://github.com/rongxinzy/VeriGen/issues/?))
+- Added 10 Quartus design rule Playbook entries: `comb-always-complete`, `case-default-complete`, `avoid-transparent-latch`, `register-power-up`, `clock-mux-glitch-free`, `tri-state-top-level-only`, `sync-reset-design`, `metastability-sync`, `ram-inference-quartus`, `quartus-help-authority`.
+
 ## [0.79.16] - 2026-06-11
 
 ### Fixed
